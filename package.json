@@ -1,0 +1,50 @@
+{
+  "name": "ai-tutor",
+  "version": "1.0.0",
+  "description": "AI-powered tutoring system with chatbot interface and learning analytics",
+  "main": "backend_python/main.py",
+  "scripts": {
+    "start": "cd backend_python && python main.py",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:all": "npm run dev",
+    "dev:backend": "cd backend_python && python main.py",
+    "dev:frontend": "cd frontend && npm start",
+    "build": "cd frontend && npm run build",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "cd backend_python && python -m pytest",
+    "test:frontend": "cd frontend && npm test",
+    "install:all": "npm install && cd frontend && npm install",
+    "setup": "npm run install:all && pip install -r scripts/requirements.txt",
+    "python:test": "cd scripts && python -m pytest",
+    "python:chunker": "cd scripts && python chunker.py",
+    "python:query": "cd scripts && python query_handler.py",
+    "clean": "rm -rf node_modules frontend/node_modules",
+    "fresh-install": "npm run clean && npm run setup"
+  },
+  "keywords": [
+    "ai",
+    "tutor",
+    "chatbot",
+    "education",
+    "llm",
+    "vector-database",
+    "learning-analytics"
+  ],
+  "author": "Ai-Tutor Research Team",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "python": ">=3.9.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/daivikpurani/Ai-Tutor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/daivikpurani/Ai-Tutor/issues"
+  },
+  "homepage": "https://github.com/daivikpurani/Ai-Tutor#readme"
+}

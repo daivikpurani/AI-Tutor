@@ -1,0 +1,34 @@
+# Ai-Tutor Python Dependencies
+# Core dependencies for document processing and LLM integration
+
+# Document processing
+PyPDF2==3.0.1
+python-docx==1.1.0
+python-magic==0.4.27
+
+# LLM and AI libraries
+openai==1.3.0
+langchain==0.0.350
+tiktoken==0.5.1
+
+# Vector database and embeddings
+pinecone-client==2.2.4
+sentence-transformers==2.2.2
+numpy==1.24.3
+
+# HTTP requests and API handling
+requests==2.31.0
+httpx==0.25.2
+
+# Data processing
+pandas==2.0.3
+python-dotenv==1.0.0
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# Development tools
+black==23.9.1
+flake8==6.1.0
+mypy==1.6.1

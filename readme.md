@@ -38,31 +38,23 @@ Ai-Tutor is an intelligent tutoring system that leverages conversational AI to p
 Ai-Tutor/
 ├── frontend/                 # React application
 │   ├── src/
-│   │   ├── components/       # Reusable UI components
-│   │   ├── pages/           # Main application pages
-│   │   ├── hooks/           # Custom React hooks
-│   │   ├── services/        # API communication layer
-│   │   └── utils/           # Helper functions
-│   ├── public/              # Static assets
-│   └── package.json
+│   │   ├── App.jsx          # Main chatbot component
+│   │   ├── App.css          # Chatbot styling
+│   │   ├── index.js         # React entry point
+│   │   └── index.css        # Global styles
+│   ├── public/
+│   │   └── index.html       # HTML template
+│   └── package.json         # Frontend dependencies
 ├── backend/                  # Node.js API server
-│   ├── src/
-│   │   ├── controllers/     # Request handlers
-│   │   ├── models/          # Data models
-│   │   ├── routes/          # API route definitions
-│   │   ├── middleware/      # Authentication, validation
-│   │   └── services/        # Business logic
-│   ├── tests/               # Backend unit tests
-│   └── package.json
+│   ├── index.js             # Express server with API routes
+│   └── package.json         # Backend dependencies
 ├── scripts/                  # Python AI processing scripts
-│   ├── document_processor/  # File chunking and embedding
-│   ├── llm_handler/         # LLM API interactions
-│   ├── vector_store/        # Pinecone operations
-│   └── requirements.txt
-├── docs/                    # Documentation
-│   ├── architecture.md     # System architecture details
-│   ├── api.md              # API documentation
-│   └── deployment.md       # Deployment guidelines
+│   ├── chunker.py           # Document chunking functionality
+│   ├── query_handler.py     # LLM query processing
+│   └── requirements.txt     # Python dependencies
+├── package.json             # Root package.json with unified scripts
+├── env.example              # Environment variables template
+├── .gitignore              # Git ignore rules
 └── README.md               # This file
 ```
 
@@ -71,7 +63,7 @@ Ai-Tutor/
 ### Prerequisites
 
 - **Node.js**: >= 18.x
-- **Python**: >= 3.10
+- **Python**: >= 3.9
 - **npm**: Latest stable version
 - **pip**: Latest stable version
 
@@ -94,33 +86,41 @@ PORT=3001
 NODE_ENV=development
 
 # Frontend Configuration
-REACT_APP_API_URL=http://localhost:3001
+REACT_APP_API_URL=http://localhost:8000
 ```
 
 ### Installation Steps
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/daivikpurani/Ai-Tutor.git
    cd Ai-Tutor
    ```
 
-2. **Install backend dependencies**
+2. **Install all dependencies (recommended)**
    ```bash
-   cd backend
-   npm install
+   npm run setup
    ```
 
-3. **Install frontend dependencies**
+   Or install individually:
    ```bash
-   cd ../frontend
+   # Install root dependencies
    npm install
+   
+   # Install backend dependencies
+   cd backend_python && pip install -r requirements.txt && cd ..
+   
+   # Install frontend dependencies
+   cd frontend && npm install && cd ..
+   
+   # Install Python dependencies
+   pip install -r scripts/requirements.txt
    ```
 
-4. **Install Python dependencies**
+3. **Set up environment variables**
    ```bash
-   cd ../scripts
-   pip install -r requirements.txt
+   cp env.example .env
+   # Edit .env with your actual API keys
    ```
 
 ### Development Entry Points
@@ -128,8 +128,8 @@ REACT_APP_API_URL=http://localhost:3001
 #### Option 1: Individual Services
 ```bash
 # Terminal 1 - Backend Server
-cd backend
-npm run dev
+cd backend_python
+python main.py
 
 # Terminal 2 - Frontend Development Server
 cd frontend
@@ -137,12 +137,16 @@ npm start
 
 # Terminal 3 - Python Scripts (as needed)
 cd scripts
-python document_processor/main.py
+python chunker.py
+python query_handler.py
 ```
 
 #### Option 2: Unified Development Command
 ```bash
 # Run both frontend and backend concurrently
+npm run dev
+
+# Alternative command (same as above)
 npm run dev:all
 ```
 
@@ -158,18 +162,19 @@ npm run dev:all
 - **Coverage**: Unit tests for document processing and LLM interactions
 - **Command**: `pytest` (from scripts directory)
 
-### Test Structure
-```
-backend/tests/
-├── controllers/
-├── services/
-├── middleware/
-└── utils/
+### Test Commands
+```bash
+# Run all tests
+npm test
 
-scripts/tests/
-├── document_processor/
-├── llm_handler/
-└── vector_store/
+# Run backend tests only
+npm run test:backend
+
+# Run frontend tests only
+npm run test:frontend
+
+# Run Python tests
+npm run python:test
 ```
 
 ## 6. User Roles & Interfaces
@@ -214,6 +219,7 @@ scripts/tests/
 
 ### Current Documentation
 - **README.md**: This comprehensive project overview
+- **DEVELOPER.md**: Detailed developer documentation with technical specifications
 - **Inline Comments**: Code documentation within source files
 
 ### Planned Documentation
@@ -223,21 +229,25 @@ scripts/tests/
 - **API Documentation**: Comprehensive endpoint reference
 - **User Guides**: Role-specific usage instructions
 
-### Documentation Structure
-```
-docs/
-├── architecture/
-│   ├── system-overview.md
-│   ├── component-diagram.md
-│   └── data-flow.md
-├── api/
-│   ├── endpoints.md
-│   ├── authentication.md
-│   └── examples.md
-└── user-guides/
-    ├── student-guide.md
-    ├── instructor-guide.md
-    └── developer-guide.md
+### Available Scripts
+```bash
+# Development
+npm run dev              # Run both frontend and backend
+npm run dev:all          # Same as npm run dev
+npm run dev:backend      # Run backend only
+npm run dev:frontend     # Run frontend only
+
+# Python scripts
+npm run python:chunker   # Test document chunker
+npm run python:query     # Test query handler
+
+# Building and deployment
+npm run build            # Build frontend for production
+npm start                # Start production server
+
+# Maintenance
+npm run clean            # Remove all node_modules
+npm run fresh-install    # Clean and reinstall everything
 ```
 
 ## 9. Licensing & Contribution
@@ -257,11 +267,38 @@ docs/
 
 ## Getting Started
 
-1. Review the setup instructions above
-2. Configure your environment variables
-3. Install dependencies for all components
-4. Start the development servers
-5. Upload sample course materials to test the system
-6. Begin exploring the chatbot interface
+1. **Clone and setup the project**
+   ```bash
+   git clone https://github.com/daivikpurani/Ai-Tutor.git
+   cd Ai-Tutor
+   npm run setup
+   cp env.example .env
+   ```
+
+2. **Configure your environment variables**
+   - Edit `.env` with your actual API keys
+   - Set up OpenAI, Pinecone, or ChaiJibri credentials
+
+3. **Start the development servers**
+   ```bash
+   npm run dev
+   ```
+
+4. **Access the application**
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:8000
+
+5. **Test the Python scripts**
+   ```bash
+   npm run python:chunker
+   npm run python:query
+   ```
+
+6. **Begin exploring the chatbot interface**
+   - Open the frontend in your browser
+   - Start chatting with the AI tutor
+   - Upload course materials through the backend API
+
+For detailed technical information, API documentation, and troubleshooting, see [DEVELOPER.md](./DEVELOPER.md).
 
 For additional support or questions, please contact the development team or refer to the internal documentation repository.
