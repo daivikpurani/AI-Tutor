@@ -10,7 +10,7 @@ function App() {
   const [messages, setMessages] = useState([
     {
       id: 1,
-      text: "Hello! I'm your AI tutor. How can I help you learn today?",
+      text: "Hello! I'm your AI tutor. I'm ready to help you learn and answer questions about your course materials. What would you like to explore today?",
       sender: 'bot',
       timestamp: new Date().toISOString()
     }
@@ -19,7 +19,8 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [currentStreamingMessage, setCurrentStreamingMessage] = useState('');
-  const [demoMode, setDemoMode] = useState(true); // Enable demo mode by default
+  const [demoMode, setDemoMode] = useState(false); // Start in live mode by default
+  const [showSuggestions, setShowSuggestions] = useState(true);
   const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
@@ -382,25 +383,24 @@ model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test))
     }, 500);
   };
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!inputMessage.trim() || isLoading) return;
+  // Helper function to send a message
+  const sendMessage = async (messageText) => {
+    if (!messageText.trim() || isLoading) return;
 
     const userMessage = {
       id: Date.now(),
-      text: inputMessage,
+      text: messageText,
       sender: 'user',
       timestamp: new Date().toISOString()
     };
 
     setMessages(prev => [...prev, userMessage]);
-    const messageToSend = inputMessage;
-    setInputMessage('');
+    setShowSuggestions(false); // Hide suggestions after first message
     setIsLoading(true);
 
     // Demo mode - simulate streaming response
     if (demoMode) {
-      await simulateStreamingResponse(messageToSend);
+      await simulateStreamingResponse(messageText);
       return;
     }
 
@@ -408,7 +408,7 @@ model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test))
       // Send message via WebSocket
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({
-          message: messageToSend,
+          message: messageText,
           user_id: 'demo-user'
         }));
       } else {
@@ -419,7 +419,7 @@ model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test))
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            message: messageToSend,
+            message: messageText,
             user_id: 'demo-user'
           }),
         });
@@ -444,6 +444,15 @@ model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test))
       setMessages(prev => [...prev, errorMessage]);
       setIsLoading(false);
     }
+  };
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!inputMessage.trim() || isLoading) return;
+
+    const messageToSend = inputMessage;
+    setInputMessage('');
+    await sendMessage(messageToSend);
   };
 
   const formatTime = (timestamp) => {
@@ -649,32 +658,34 @@ model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test))
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="demo-suggestions">
-          <p>{demoMode ? 'Try these demo questions:' : 'Suggested questions to get started:'}</p>
-          <div className="suggestion-buttons">
-            {(demoMode ? [
-              'What is machine learning?', 
-              'Explain AI', 
-              'How do neural networks work?', 
-              'What is web development?'
-            ] : [
-              'What topics can you help me learn?',
-              'How does this AI tutoring system work?',
-              'Can you explain a concept step by step?',
-              'What study materials do you have?',
-              'Help me understand a difficult topic',
-              'Create a study plan for me'
-            ]).map((suggestion, index) => (
-              <button
-                key={index}
-                onClick={() => setInputMessage(suggestion)}
-                className="suggestion-button"
-              >
-                {suggestion}
-              </button>
-            ))}
+        {showSuggestions && (
+          <div className="demo-suggestions">
+            <p>{demoMode ? 'Try these demo questions:' : 'Suggested questions to get started:'}</p>
+            <div className="suggestion-buttons">
+              {(demoMode ? [
+                'What is machine learning?', 
+                'Explain AI', 
+                'How do neural networks work?', 
+                'What is web development?'
+              ] : [
+                'What topics can you help me learn?',
+                'How does this AI tutoring system work?',
+                'Can you explain a concept step by step?',
+                'What study materials do you have?',
+                'Help me understand a difficult topic',
+                'Create a study plan for me'
+              ]).map((suggestion, index) => (
+                <button
+                  key={index}
+                  onClick={() => sendMessage(suggestion)}
+                  className="suggestion-button"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
           <form className="input-form" onSubmit={handleSendMessage}>
             <div className="input-container">
