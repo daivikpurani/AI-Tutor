@@ -4,10 +4,10 @@
   "description": "AI-powered tutoring system with chatbot interface and learning analytics",
   "main": "backend_python/main.py",
   "scripts": {
-    "start": "cd backend_python && python main.py",
+    "start": "cd backend_python && python3 main.py",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:all": "npm run dev",
-    "dev:backend": "cd backend_python && python main.py",
+    "dev:backend": "cd backend_python && python3 main.py",
     "dev:frontend": "cd frontend && npm start",
     "build": "cd frontend && npm run build",
     "test": "npm run test:backend && npm run test:frontend",

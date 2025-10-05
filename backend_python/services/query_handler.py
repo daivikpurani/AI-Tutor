@@ -1,17 +1,17 @@
 """
-Enhanced Query Handler with LLM Integration
-Processes user queries using OpenAI API and ChromaDB vector search.
+Enhanced Query Handler with Hybrid LLM Integration
+Processes user queries using multiple LLM providers with intelligent routing.
 """
 
 import os
 import json
 from typing import Dict, List, Any, Optional
+import re
 from datetime import datetime
-import openai
-from openai import AsyncOpenAI
 import logging
 
 from services.vector_db import VectorDatabase
+from services.llm_service import HybridLLMService, LLMResponse
 from utils.prompts import PromptTemplates
 
 logger = logging.getLogger(__name__)
@@ -29,25 +29,35 @@ class QueryHandler:
             vector_db: VectorDatabase instance for document retrieval
         """
         self.vector_db = vector_db or VectorDatabase()
-        self.openai_client = None
+        self.llm_service = HybridLLMService()
         self.conversation_history = []
         self.prompt_templates = PromptTemplates()
         
-        # Initialize OpenAI client
-        self._initialize_openai()
+        # Initialize hybrid LLM service (will be called asynchronously)
+        self._llm_service_initialized = False
+
+    def _normalize_text(self, text: str) -> str:
+        """Lowercase, strip, and remove punctuation for stable intent matching."""
+        if not text:
+            return ""
+        lowered = text.lower().strip()
+        # keep alphanumerics and spaces only
+        normalized = re.sub(r"[^a-z0-9\s]+", "", lowered)
+        # collapse multiple spaces
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        return normalized
     
-    def _initialize_openai(self):
-        """Initialize OpenAI client."""
-        try:
-            api_key = os.getenv('OPENAI_API_KEY')
-            if not api_key:
-                logger.warning("OPENAI_API_KEY not found. Using mock responses.")
-                return
-            
-            self.openai_client = AsyncOpenAI(api_key=api_key)
-            logger.info("OpenAI client initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize OpenAI client: {e}")
+    async def _ensure_llm_service_initialized(self):
+        """Ensure hybrid LLM service is initialized."""
+        if not self._llm_service_initialized:
+            try:
+                await self.llm_service.initialize()
+                available_providers = self.llm_service.get_available_providers()
+                logger.info(f"Hybrid LLM service initialized with providers: {available_providers}")
+                self._llm_service_initialized = True
+            except Exception as e:
+                logger.error(f"Failed to initialize hybrid LLM service: {e}")
+                self._llm_service_initialized = False
     
     async def process_query(
         self, 
@@ -67,6 +77,9 @@ class QueryHandler:
             Dictionary containing the response and metadata
         """
         try:
+            # Ensure LLM service is initialized
+            await self._ensure_llm_service_initialized()
+            
             # Store query in conversation history
             self._add_to_history(query, 'user', user_id)
             
@@ -138,7 +151,7 @@ class QueryHandler:
         conversation_history: List[Dict] = None
     ) -> str:
         """
-        Generate response using OpenAI API.
+        Generate response using hybrid LLM service.
         
         Args:
             query: User's question
@@ -149,10 +162,6 @@ class QueryHandler:
             Generated response text
         """
         try:
-            # If no OpenAI client, use mock response
-            if not self.openai_client:
-                return self._generate_mock_response(query, context_chunks)
-            
             # Build context from chunks
             context_text = self._build_context_text(context_chunks)
             
@@ -166,19 +175,22 @@ class QueryHandler:
                 conversation_history=history_text
             )
             
-            # Call OpenAI API
-            response = await self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": self.prompt_templates.SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt}
-                ],
+            # Prepare messages for LLM
+            messages = [
+                {"role": "system", "content": self.prompt_templates.SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ]
+            
+            # Use hybrid LLM service
+            response = await self.llm_service.generate_response(
+                messages=messages,
+                query=query,
                 max_tokens=1000,
-                temperature=0.7,
-                top_p=0.9
+                temperature=0.7
             )
             
-            return response.choices[0].message.content.strip()
+            logger.info(f"Generated response using {response.provider.value} provider")
+            return response.content.strip()
             
         except Exception as e:
             logger.error(f"Failed to generate LLM response: {e}")
@@ -212,32 +224,43 @@ class QueryHandler:
     
     def _generate_mock_response(self, query: str, context_chunks: List[Dict]) -> str:
         """Generate a mock response when OpenAI is not available."""
+        normalized = self._normalize_text(query)
+        predefined_answers = {
+            "what is web development": (
+                "Web development is the discipline of designing, building, and maintaining websites and "
+                "web applications that run in a browser. It spans three main areas: (1) front-end "
+                "development, which focuses on the user interface and experience using HTML for structure, "
+                "CSS for presentation, and JavaScript for interactivity; (2) back-end development, which "
+                "handles business logic, data storage, authentication, and APIs using servers, databases, "
+                "and frameworks; and (3) DevOps/deployment, which covers hosting, CI/CD, monitoring, and "
+                "scalability on platforms like Vercel, Netlify, or cloud providers.\n\n"
+                "Modern web development emphasizes accessibility (inclusive design and semantic HTML), "
+                "performance (fast loading and responsive rendering), security (input validation, auth, "
+                "and HTTPS), and SEO (crawlability and metadata). Common stacks include React/Vue/Svelte "
+                "on the front-end, Node/Python/Go/Java on the back-end, REST/GraphQL for APIs, and "
+                "databases like Postgres, MySQL, or MongoDB. The goal is to deliver reliable, accessible, "
+                "and maintainable experiences across devices and network conditions."
+            ),
+            "web development": (
+                "Web development is the process of creating and maintaining websites and web apps. It "
+                "includes front-end UI (HTML, CSS, JavaScript), back-end services (servers, databases, "
+                "APIs), and deployment/operations, with strong focus on accessibility, performance, and "
+                "security."
+            ),
+        }
+        # Prefer exact intent match over substring matches
+        if normalized in predefined_answers:
+            return predefined_answers[normalized]
+
         if context_chunks:
             context_info = f"I found {len(context_chunks)} relevant sections in your course materials that address this topic."
         else:
             context_info = "I don't have specific information about this topic in your uploaded materials."
-        
-        mock_responses = [
-            f"Great question about '{query}'! {context_info} Let me explain this concept based on what I know.",
-            f"Excellent question! '{query}' is an important topic. {context_info} Here's what I can tell you about it.",
-            f"I'd be happy to help with '{query}'. {context_info} This is a fundamental concept worth understanding.",
-            f"Interesting question about '{query}'! {context_info} Let me break this down for you."
-        ]
-        
-        # Simple mock response selection based on query length
-        response_index = len(query) % len(mock_responses)
-        base_response = mock_responses[response_index]
-        
-        # Add some educational content
-        educational_additions = [
-            "\n\nThis concept is important because it forms the foundation for more advanced topics.",
-            "\n\nUnderstanding this will help you with related concepts in your studies.",
-            "\n\nThis topic often appears in exams and practical applications.",
-            "\n\nMastering this concept will make future learning much easier."
-        ]
-        
-        addition_index = len(query) % len(educational_additions)
-        return base_response + educational_additions[addition_index]
+
+        return (
+            f"Here's a concise answer about '{query}': "
+            f"{context_info} Please provide or upload materials for a context-grounded explanation."
+        )
     
     def _add_to_history(self, message: str, role: str, user_id: str = None):
         """Add message to conversation history."""
@@ -287,6 +310,9 @@ class QueryHandler:
             manager: Connection manager for sending messages
         """
         try:
+            # Ensure LLM service is initialized
+            await self._ensure_llm_service_initialized()
+            
             # Store query in conversation history
             self._add_to_history(query, 'user', user_id)
             
@@ -336,7 +362,7 @@ class QueryHandler:
         manager = None
     ) -> None:
         """
-        Generate streaming response using OpenAI API.
+        Generate streaming response using hybrid LLM service.
         
         Args:
             query: User's question
@@ -345,11 +371,6 @@ class QueryHandler:
             manager: Connection manager for sending messages
         """
         try:
-            # If no OpenAI client, use mock streaming response
-            if not self.openai_client:
-                await self._generate_mock_streaming_response(query, context_chunks, websocket, manager)
-                return
-            
             # Build context from chunks
             context_text = self._build_context_text(context_chunks)
             
@@ -360,42 +381,40 @@ class QueryHandler:
                 conversation_history=""
             )
             
-            # Send generation start message
+            # Prepare messages for LLM
+            messages = [
+                {"role": "system", "content": self.prompt_templates.SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ]
+            
+            # Optional thinking delay before showing chunks
             start_msg = {
                 "type": "generating",
                 "message": "Generating response...",
                 "timestamp": datetime.now().isoformat()
             }
             await manager.send_personal_message(json.dumps(start_msg), websocket)
+            import asyncio
+            await asyncio.sleep(0.6)
             
-            # Call OpenAI API with streaming
-            stream = await self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": self.prompt_templates.SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=1000,
-                temperature=0.7,
-                top_p=0.9,
-                stream=True
-            )
-            
+            # Use hybrid LLM service for streaming
             full_response = ""
             
-            # Stream the response
-            async for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
-                    content = chunk.choices[0].delta.content
-                    full_response += content
-                    
-                    # Send chunk to client
-                    chunk_msg = {
-                        "type": "chunk",
-                        "content": content,
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    await manager.send_personal_message(json.dumps(chunk_msg), websocket)
+            async for chunk in self.llm_service.generate_streaming_response(
+                messages=messages,
+                query=query,
+                max_tokens=1000,
+                temperature=0.7
+            ):
+                full_response += chunk
+                
+                # Send chunk to client
+                chunk_msg = {
+                    "type": "chunk",
+                    "content": chunk,
+                    "timestamp": datetime.now().isoformat()
+                }
+                await manager.send_personal_message(json.dumps(chunk_msg), websocket)
             
             # Send completion message
             complete_msg = {
@@ -421,32 +440,40 @@ class QueryHandler:
     ) -> None:
         """Generate a mock streaming response when OpenAI is not available."""
         try:
-            if context_chunks:
-                context_info = f"I found {len(context_chunks)} relevant sections in your course materials that address this topic."
-            else:
-                context_info = "I don't have specific information about this topic in your uploaded materials."
-            
-            mock_responses = [
-                f"Great question about '{query}'! {context_info} Let me explain this concept based on what I know.",
-                f"Excellent question! '{query}' is an important topic. {context_info} Here's what I can tell you about it.",
-                f"I'd be happy to help with '{query}'. {context_info} This is a fundamental concept worth understanding.",
-                f"Interesting question about '{query}'! {context_info} Let me break this down for you."
-            ]
-            
-            # Simple mock response selection based on query length
-            response_index = len(query) % len(mock_responses)
-            base_response = mock_responses[response_index]
-            
-            # Add some educational content
-            educational_additions = [
-                "\n\nThis concept is important because it forms the foundation for more advanced topics.",
-                "\n\nUnderstanding this will help you with related concepts in your studies.",
-                "\n\nThis topic often appears in exams and practical applications.",
-                "\n\nMastering this concept will make future learning much easier."
-            ]
-            
-            addition_index = len(query) % len(educational_additions)
-            full_response = base_response + educational_additions[addition_index]
+            normalized = self._normalize_text(query)
+            predefined_answers = {
+                "what is web development": (
+                    "Web development is the practice of building and maintaining websites and web "
+                    "applications. It spans front-end (HTML, CSS, JavaScript), back-end (servers, "
+                    "databases, APIs), and deployment/operations, with focus on performance, security, "
+                    "accessibility, and SEO."
+                ),
+                "web development": (
+                    "Web development is the process of creating and maintaining websites and web apps, "
+                    "covering front-end UI, back-end logic and data, and deployment."
+                ),
+            }
+            full_response = None
+            if normalized in predefined_answers:
+                full_response = predefined_answers[normalized]
+
+            if full_response is None:
+                if context_chunks:
+                    context_info = (
+                        f"I found {len(context_chunks)} relevant sections in your course materials that address this topic."
+                    )
+                else:
+                    context_info = (
+                        "I don't have specific information about this topic in your uploaded materials."
+                    )
+                full_response = (
+                    f"Here's a concise answer about '{query}': {context_info} "
+                    f"Please upload materials for a context-grounded explanation."
+                )
+
+            # Add a small thinking delay before streaming
+            import asyncio
+            await asyncio.sleep(0.6)
             
             # Send generation start message
             start_msg = {

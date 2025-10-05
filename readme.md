@@ -29,7 +29,7 @@ Ai-Tutor is an intelligent tutoring system that leverages conversational AI to p
 ### AI & Machine Learning
 - **Python**: Core language for LLM interactions and data processing
 - **LLM Integration**: Support for OpenAI GPT models and ChaiJibri API
-- **Vector Storage**: Pinecone for embedding storage and similarity search
+- **Vector Storage**: ChromaDB (persistent local store)
 - **Document Processing**: Text chunking and embedding generation
 
 ## 3. Repository Structure
@@ -74,7 +74,6 @@ Create a `.env` file in the project root with the following variables:
 ```env
 # API Keys
 OPENAI_API_KEY=your_openai_api_key_here
-PINECONE_API_KEY=your_pinecone_api_key_here
 CHAIBRI_API_KEY=your_chaibri_api_key_here
 
 # Database Configuration
@@ -277,7 +276,7 @@ npm run fresh-install    # Clean and reinstall everything
 
 2. **Configure your environment variables**
    - Edit `.env` with your actual API keys
-   - Set up OpenAI, Pinecone, or ChaiJibri credentials
+  - Set up OpenAI or ChaiJibri credentials
 
 3. **Start the development servers**
    ```bash

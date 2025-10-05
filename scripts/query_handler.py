@@ -20,10 +20,10 @@ class QueryHandler:
         
         Args:
             llm_api_key: API key for LLM service (OpenAI, ChaiJibri, etc.)
-            vector_db_key: API key for vector database (Pinecone, etc.)
+            vector_db_key: Reserved for future use (no external vector DB required)
         """
         self.llm_api_key = llm_api_key or os.getenv('OPENAI_API_KEY')
-        self.vector_db_key = vector_db_key or os.getenv('PINECONE_API_KEY')
+        self.vector_db_key = vector_db_key  # No Pinecone required
         self.conversation_history = []
     
     def process_query(self, query: str, user_id: str = None, context_chunks: List[Dict] = None) -> Dict[str, Any]:

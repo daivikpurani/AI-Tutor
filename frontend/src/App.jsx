@@ -143,6 +143,7 @@ function App() {
   // Demo mode function for presentation
   const simulateStreamingResponse = async (query) => {
     const demoResponses = {
+      "what is web development": "Web development is the discipline of designing, building, and maintaining websites and web applications that run in a browser. It spans three main areas: (1) front-end development, which focuses on the user interface and experience using HTML for structure, CSS for presentation, and JavaScript for interactivity; (2) back-end development, which handles business logic, data storage, authentication, and APIs using servers, databases, and frameworks; and (3) DevOps/deployment, which covers hosting, CI/CD, monitoring, and scalability on platforms like Vercel, Netlify, or cloud providers.\n\nModern web development emphasizes accessibility (inclusive design and semantic HTML), performance (fast loading and responsive rendering), security (input validation, auth, and HTTPS), and SEO (crawlability and metadata). Common stacks include React/Vue/Svelte on the front-end, Node/Python/Go/Java on the back-end, REST/GraphQL for APIs, and databases like Postgres, MySQL, or MongoDB. The goal is to deliver reliable, accessible, and maintainable experiences across devices and network conditions.",
       "what is machine learning": "Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed. It involves algorithms that can identify patterns in data and make predictions or decisions based on that data. There are three main types: supervised learning (learning from labeled examples), unsupervised learning (finding patterns in unlabeled data), and reinforcement learning (learning through trial and error with rewards).",
       "explain ai": "Artificial Intelligence (AI) refers to the simulation of human intelligence in machines that are programmed to think and learn like humans. It encompasses various technologies including machine learning, natural language processing, computer vision, and robotics. AI systems can perform tasks that typically require human intelligence, such as visual perception, speech recognition, decision-making, and language translation.",
       "how do neural networks work": "Neural networks are computing systems inspired by biological neural networks. They consist of interconnected nodes (neurons) organized in layers. Information flows through the network, with each neuron processing inputs and passing results to the next layer. During training, the network adjusts connection weights to minimize errors. This allows the network to learn complex patterns and make accurate predictions on new data."
@@ -346,7 +347,7 @@ function App() {
               Try these demo questions:
             </p>
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
-              {['What is machine learning?', 'Explain AI', 'How do neural networks work?'].map((suggestion, index) => (
+              {['What is machine learning?', 'Explain AI', 'How do neural networks work?', 'What is web development?'].map((suggestion, index) => (
                 <button
                   key={index}
                   onClick={() => setInputMessage(suggestion)}

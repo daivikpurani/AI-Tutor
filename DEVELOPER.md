@@ -54,12 +54,7 @@ Before starting development, obtain the following API keys:
    - Create API key in dashboard
    - Add to `.env` as `OPENAI_API_KEY`
 
-2. **Pinecone API Key** (Vector Database)
-   - Sign up at: https://www.pinecone.io/
-   - Create project and get API key
-   - Add to `.env` as `PINECONE_API_KEY`
-
-3. **ChaiJibri API Key** (Alternative LLM)
+2. **ChaiJibri API Key** (Alternative LLM, optional)
    - Sign up at: https://chaibri.com/
    - Get API key from dashboard
    - Add to `.env` as `CHAIBRI_API_KEY`
@@ -99,7 +94,6 @@ Edit `.env` with your actual API keys and configuration:
 ```env
 # Required API Keys
 OPENAI_API_KEY=sk-your-openai-key-here
-PINECONE_API_KEY=your-pinecone-key-here
 CHAIBRI_API_KEY=your-chaibri-key-here
 
 # Database (optional for development)
@@ -454,7 +448,6 @@ CMD ["npm", "start"]
 NODE_ENV=production
 PORT=3001
 OPENAI_API_KEY=prod-key
-PINECONE_API_KEY=prod-key
 DATABASE_URL=prod-database-url
 ```
 
@@ -647,7 +640,7 @@ docs(readme): update installation instructions
 - [React Documentation](https://reactjs.org/docs/)
 - [Express.js Documentation](https://expressjs.com/)
 - [OpenAI API Documentation](https://platform.openai.com/docs)
-- [Pinecone Documentation](https://docs.pinecone.io/)
+
 
 ### Development Tools
 - **IDE**: VS Code with React and Python extensions
