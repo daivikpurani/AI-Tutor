@@ -25,9 +25,56 @@ function App() {
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const streamBufferRef = useRef('');
+  const scrollbarTimeoutRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  // Auto-hide scrollbar functionality - Smooth fade approach
+  const showScrollbar = () => {
+    const messagesContainer = document.querySelector('.messages-container');
+    const sidebar = document.querySelector('.sidebar');
+    
+    if (messagesContainer) {
+      messagesContainer.classList.remove('scrollbar-hidden');
+      messagesContainer.classList.add('scrollbar-visible');
+    }
+    if (sidebar) {
+      sidebar.classList.remove('scrollbar-hidden');
+      sidebar.classList.add('scrollbar-visible');
+    }
+    
+    // Clear existing timeout
+    if (scrollbarTimeoutRef.current) {
+      clearTimeout(scrollbarTimeoutRef.current);
+    }
+    
+    // Set timeout to hide scrollbar after 1.5 seconds (smoother)
+    scrollbarTimeoutRef.current = setTimeout(() => {
+      if (messagesContainer) {
+        messagesContainer.classList.remove('scrollbar-visible');
+        messagesContainer.classList.add('scrollbar-hidden');
+      }
+      if (sidebar) {
+        sidebar.classList.remove('scrollbar-visible');
+        sidebar.classList.add('scrollbar-hidden');
+      }
+    }, 1500);
+  };
+
+  const hideScrollbar = () => {
+    const messagesContainer = document.querySelector('.messages-container');
+    const sidebar = document.querySelector('.sidebar');
+    
+    if (messagesContainer) {
+      messagesContainer.classList.remove('scrollbar-visible');
+      messagesContainer.classList.add('scrollbar-hidden');
+    }
+    if (sidebar) {
+      sidebar.classList.remove('scrollbar-visible');
+      sidebar.classList.add('scrollbar-hidden');
+    }
   };
 
   useEffect(() => {
@@ -43,6 +90,59 @@ function App() {
       }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Scrollbar auto-hide effect
+  useEffect(() => {
+    const handleScroll = () => {
+      showScrollbar();
+    };
+
+    const handleWheel = () => {
+      showScrollbar();
+    };
+
+    const handleMouseMove = () => {
+      showScrollbar();
+    };
+
+    // Add event listeners to multiple elements
+    const messagesContainer = document.querySelector('.messages-container');
+    const sidebar = document.querySelector('.sidebar');
+    
+    if (messagesContainer) {
+      messagesContainer.addEventListener('scroll', handleScroll, { passive: true });
+      messagesContainer.addEventListener('wheel', handleWheel, { passive: true });
+    }
+    
+    if (sidebar) {
+      sidebar.addEventListener('scroll', handleScroll, { passive: true });
+      sidebar.addEventListener('wheel', handleWheel, { passive: true });
+    }
+    
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+
+    // Initialize scrollbar as visible
+    showScrollbar();
+
+    return () => {
+      if (messagesContainer) {
+        messagesContainer.removeEventListener('scroll', handleScroll);
+        messagesContainer.removeEventListener('wheel', handleWheel);
+      }
+      if (sidebar) {
+        sidebar.removeEventListener('scroll', handleScroll);
+        sidebar.removeEventListener('wheel', handleWheel);
+      }
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (scrollbarTimeoutRef.current) {
+        clearTimeout(scrollbarTimeoutRef.current);
       }
     };
   }, []);
@@ -709,9 +809,6 @@ model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test))
         </div>
       </main>
 
-      <footer className="app-footer">
-        <p>Ai-Tutor v1.0.0 - Research Project</p>
-      </footer>
     </div>
   );
 }
