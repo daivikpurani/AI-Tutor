@@ -11,7 +11,7 @@ function App() {
   const [messages, setMessages] = useState([
     {
       id: 1,
-      text: "Hello! I'm your AI tutor. How can I help you learn today?",
+      text: "Hello! I'm your AI tutor. I'm ready to help you learn and answer questions about your course materials. What would you like to explore today?",
       sender: 'bot',
       timestamp: new Date().toISOString()
     }
@@ -22,13 +22,61 @@ function App() {
   const [currentStreamingMessage, setCurrentStreamingMessage] = useState('');
   const [demoMode, setDemoMode] = useState(true); // Enable demo mode by default
   const [currentPage, setCurrentPage] = useState('chat'); // Track current page
+  const [showSuggestions, setShowSuggestions] = useState(true);
   const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const streamBufferRef = useRef('');
+  const scrollbarTimeoutRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  // Auto-hide scrollbar functionality - Smooth fade approach
+  const showScrollbar = () => {
+    const messagesContainer = document.querySelector('.messages-container');
+    const sidebar = document.querySelector('.sidebar');
+    
+    if (messagesContainer) {
+      messagesContainer.classList.remove('scrollbar-hidden');
+      messagesContainer.classList.add('scrollbar-visible');
+    }
+    if (sidebar) {
+      sidebar.classList.remove('scrollbar-hidden');
+      sidebar.classList.add('scrollbar-visible');
+    }
+    
+    // Clear existing timeout
+    if (scrollbarTimeoutRef.current) {
+      clearTimeout(scrollbarTimeoutRef.current);
+    }
+    
+    // Set timeout to hide scrollbar after 1.5 seconds (smoother)
+    scrollbarTimeoutRef.current = setTimeout(() => {
+      if (messagesContainer) {
+        messagesContainer.classList.remove('scrollbar-visible');
+        messagesContainer.classList.add('scrollbar-hidden');
+      }
+      if (sidebar) {
+        sidebar.classList.remove('scrollbar-visible');
+        sidebar.classList.add('scrollbar-hidden');
+      }
+    }, 1500);
+  };
+
+  const hideScrollbar = () => {
+    const messagesContainer = document.querySelector('.messages-container');
+    const sidebar = document.querySelector('.sidebar');
+    
+    if (messagesContainer) {
+      messagesContainer.classList.remove('scrollbar-visible');
+      messagesContainer.classList.add('scrollbar-hidden');
+    }
+    if (sidebar) {
+      sidebar.classList.remove('scrollbar-visible');
+      sidebar.classList.add('scrollbar-hidden');
+    }
   };
 
   useEffect(() => {
@@ -44,6 +92,59 @@ function App() {
       }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Scrollbar auto-hide effect
+  useEffect(() => {
+    const handleScroll = () => {
+      showScrollbar();
+    };
+
+    const handleWheel = () => {
+      showScrollbar();
+    };
+
+    const handleMouseMove = () => {
+      showScrollbar();
+    };
+
+    // Add event listeners to multiple elements
+    const messagesContainer = document.querySelector('.messages-container');
+    const sidebar = document.querySelector('.sidebar');
+    
+    if (messagesContainer) {
+      messagesContainer.addEventListener('scroll', handleScroll, { passive: true });
+      messagesContainer.addEventListener('wheel', handleWheel, { passive: true });
+    }
+    
+    if (sidebar) {
+      sidebar.addEventListener('scroll', handleScroll, { passive: true });
+      sidebar.addEventListener('wheel', handleWheel, { passive: true });
+    }
+    
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+
+    // Initialize scrollbar as visible
+    showScrollbar();
+
+    return () => {
+      if (messagesContainer) {
+        messagesContainer.removeEventListener('scroll', handleScroll);
+        messagesContainer.removeEventListener('wheel', handleWheel);
+      }
+      if (sidebar) {
+        sidebar.removeEventListener('scroll', handleScroll);
+        sidebar.removeEventListener('wheel', handleWheel);
+      }
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (scrollbarTimeoutRef.current) {
+        clearTimeout(scrollbarTimeoutRef.current);
       }
     };
   }, []);
@@ -384,25 +485,24 @@ model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test))
     }, 500);
   };
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!inputMessage.trim() || isLoading) return;
+  // Helper function to send a message
+  const sendMessage = async (messageText) => {
+    if (!messageText.trim() || isLoading) return;
 
     const userMessage = {
       id: Date.now(),
-      text: inputMessage,
+      text: messageText,
       sender: 'user',
       timestamp: new Date().toISOString()
     };
 
     setMessages(prev => [...prev, userMessage]);
-    const messageToSend = inputMessage;
-    setInputMessage('');
+    setShowSuggestions(false); // Hide suggestions after first message
     setIsLoading(true);
 
     // Demo mode - simulate streaming response
     if (demoMode) {
-      await simulateStreamingResponse(messageToSend);
+      await simulateStreamingResponse(messageText);
       return;
     }
 
@@ -410,7 +510,7 @@ model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test))
       // Send message via WebSocket
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({
-          message: messageToSend,
+          message: messageText,
           user_id: 'demo-user'
         }));
       } else {
@@ -421,7 +521,7 @@ model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test))
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            message: messageToSend,
+            message: messageText,
             user_id: 'demo-user'
           }),
         });
@@ -446,6 +546,15 @@ model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test))
       setMessages(prev => [...prev, errorMessage]);
       setIsLoading(false);
     }
+  };
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!inputMessage.trim() || isLoading) return;
+
+    const messageToSend = inputMessage;
+    setInputMessage('');
+    await sendMessage(messageToSend);
   };
 
   const formatTime = (timestamp) => {
@@ -680,32 +789,34 @@ model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test))
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="demo-suggestions">
-          <p>{demoMode ? 'Try these demo questions:' : 'Suggested questions to get started:'}</p>
-          <div className="suggestion-buttons">
-            {(demoMode ? [
-              'What is machine learning?', 
-              'Explain AI', 
-              'How do neural networks work?', 
-              'What is web development?'
-            ] : [
-              'What topics can you help me learn?',
-              'How does this AI tutoring system work?',
-              'Can you explain a concept step by step?',
-              'What study materials do you have?',
-              'Help me understand a difficult topic',
-              'Create a study plan for me'
-            ]).map((suggestion, index) => (
-              <button
-                key={index}
-                onClick={() => setInputMessage(suggestion)}
-                className="suggestion-button"
-              >
-                {suggestion}
-              </button>
-            ))}
+        {showSuggestions && (
+          <div className="demo-suggestions">
+            <p>{demoMode ? 'Try these demo questions:' : 'Suggested questions to get started:'}</p>
+            <div className="suggestion-buttons">
+              {(demoMode ? [
+                'What is machine learning?', 
+                'Explain AI', 
+                'How do neural networks work?', 
+                'What is web development?'
+              ] : [
+                'What topics can you help me learn?',
+                'How does this AI tutoring system work?',
+                'Can you explain a concept step by step?',
+                'What study materials do you have?',
+                'Help me understand a difficult topic',
+                'Create a study plan for me'
+              ]).map((suggestion, index) => (
+                <button
+                  key={index}
+                  onClick={() => sendMessage(suggestion)}
+                  className="suggestion-button"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
           <form className="input-form" onSubmit={handleSendMessage}>
             <div className="input-container">
