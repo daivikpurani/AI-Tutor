@@ -16,6 +16,30 @@ fi
 
 echo "✅ Python version check passed: $python_version"
 
+# Kill any existing processes on port 8000 to prevent "address in use" errors
+echo "🧹 Cleaning up existing processes on port 8000..."
+if [ -f "../scripts/kill-processes.sh" ]; then
+    bash ../scripts/kill-processes.sh
+else
+    echo "⚠️ Process cleanup script not found, checking port manually..."
+    # Simple port cleanup for backend only
+    existing_pids=$(lsof -ti:8000 2>/dev/null)
+    if [ -n "$existing_pids" ]; then
+        echo "Found existing processes on port 8000: $existing_pids"
+        for pid in $existing_pids; do
+            kill -TERM $pid 2>/dev/null && echo "Killed process $pid"
+        done
+        sleep 2
+        # Force kill if still running
+        remaining_pids=$(lsof -ti:8000 2>/dev/null)
+        if [ -n "$remaining_pids" ]; then
+            for pid in $remaining_pids; do
+                kill -KILL $pid 2>/dev/null && echo "Force killed process $pid"
+            done
+        fi
+    fi
+fi
+
 # Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
     echo "📦 Creating virtual environment..."

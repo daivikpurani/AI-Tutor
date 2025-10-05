@@ -5,10 +5,12 @@
   "main": "backend_python/main.py",
   "scripts": {
     "start": "cd backend_python && python3 main.py",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "npm run cleanup && concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:all": "npm run dev",
     "dev:backend": "cd backend_python && python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload",
     "dev:frontend": "cd frontend && npm run dev",
+    "cleanup": "bash scripts/kill-processes.sh",
+    "kill": "bash scripts/kill-ai-tutor.sh",
     "build": "cd frontend && npm run build",
     "test": "npm run test:backend && npm run test:frontend",
     "test:backend": "cd backend_python && python -m pytest",

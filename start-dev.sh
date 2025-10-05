@@ -110,6 +110,14 @@ mkdir -p backend_python/logs
 
 print_success "Directory setup completed ✅"
 
+# Kill any existing processes on our ports to prevent "address in use" errors
+print_status "Cleaning up existing processes..."
+if [ -f "scripts/kill-processes.sh" ]; then
+    bash scripts/kill-processes.sh
+else
+    print_warning "Process cleanup script not found, continuing anyway..."
+fi
+
 echo ""
 echo "🎯 Starting Development Servers..."
 echo "================================="

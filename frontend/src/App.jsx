@@ -5,6 +5,7 @@ import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
 import './App.css';
 import 'highlight.js/styles/github.css'; // Code highlighting theme
+import Docs from './Docs';
 
 function App() {
   const [messages, setMessages] = useState([
@@ -20,6 +21,7 @@ function App() {
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [currentStreamingMessage, setCurrentStreamingMessage] = useState('');
   const [demoMode, setDemoMode] = useState(true); // Enable demo mode by default
+  const [currentPage, setCurrentPage] = useState('chat'); // Track current page
   const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
@@ -480,9 +482,24 @@ model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test))
             <span>Ai-Tutor</span>
           </div>
           <nav className="header-nav">
-            <a href="#" className="nav-item active">Chat</a>
-            <a href="#" className="nav-item">Docs</a>
-            <a href="#" className="nav-item">Settings</a>
+            <button 
+              onClick={() => setCurrentPage('chat')} 
+              className={`nav-item ${currentPage === 'chat' ? 'active' : ''}`}
+            >
+              Chat
+            </button>
+            <button 
+              onClick={() => setCurrentPage('docs')} 
+              className={`nav-item ${currentPage === 'docs' ? 'active' : ''}`}
+            >
+              Docs
+            </button>
+            <button 
+              onClick={() => setCurrentPage('settings')} 
+              className={`nav-item ${currentPage === 'settings' ? 'active' : ''}`}
+            >
+              Settings
+            </button>
           </nav>
         </div>
         <div className="header-right">
@@ -504,51 +521,65 @@ model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test))
       </header>
 
       <main className="main-content">
-        <aside className="sidebar">
-          <div className="sidebar-section">
-            <div className="sidebar-title">Navigation</div>
-            <div className="sidebar-item active">
-              <span className="sidebar-icon">💬</span>
-              <span>New Chat</span>
-            </div>
-            <div className="sidebar-item">
-              <span className="sidebar-icon">📚</span>
-              <span>Learning History</span>
-            </div>
-            <div className="sidebar-item">
-              <span className="sidebar-icon">📊</span>
-              <span>Progress</span>
-            </div>
-          </div>
-          
-          <div className="sidebar-section">
-            <div className="sidebar-title">Quick Actions</div>
-            <div className="sidebar-item">
-              <span className="sidebar-icon">🔍</span>
-              <span>Search Topics</span>
-            </div>
-            <div className="sidebar-item">
-              <span className="sidebar-icon">📝</span>
-              <span>Study Notes</span>
-            </div>
-            <div className="sidebar-item">
-              <span className="sidebar-icon">🎯</span>
-              <span>Practice Tests</span>
-            </div>
-          </div>
-          
-          <div className="sidebar-section">
-            <div className="sidebar-title">Settings</div>
-            <div className="sidebar-item">
-              <span className="sidebar-icon">⚙️</span>
-              <span>Preferences</span>
-            </div>
-            <div className="sidebar-item">
-              <span className="sidebar-icon">ℹ️</span>
-              <span>Help & Support</span>
-            </div>
-          </div>
-        </aside>
+        {currentPage === 'chat' && (
+          <>
+            <aside className="sidebar">
+              <div className="sidebar-section">
+                <div className="sidebar-title">Navigation</div>
+                <div className="sidebar-item active">
+                  <span className="sidebar-icon">💬</span>
+                  <span>New Chat</span>
+                </div>
+                <div className="sidebar-item">
+                  <span className="sidebar-icon">📚</span>
+                  <span>Learning History</span>
+                </div>
+                <div className="sidebar-item">
+                  <span className="sidebar-icon">📊</span>
+                  <span>Progress</span>
+                </div>
+              </div>
+              
+              <div className="sidebar-section">
+                <div className="sidebar-title">Quick Actions</div>
+                <div className="sidebar-item">
+                  <span className="sidebar-icon">🔍</span>
+                  <span>Search Topics</span>
+                </div>
+                <div className="sidebar-item">
+                  <span className="sidebar-icon">📝</span>
+                  <span>Study Notes</span>
+                </div>
+                <div className="sidebar-item">
+                  <span className="sidebar-icon">🎯</span>
+                  <span>Practice Tests</span>
+                </div>
+              </div>
+              
+              <div className="sidebar-section">
+                <div className="sidebar-title">Settings</div>
+                <div className="sidebar-item">
+                  <span className="sidebar-icon">⚙️</span>
+                  <span>Preferences</span>
+                </div>
+                <div className="sidebar-item">
+                  <span className="sidebar-icon">ℹ️</span>
+                  <span>Help & Support</span>
+                </div>
+              </div>
+              
+              <div className="sidebar-section">
+                <div className="sidebar-title">Database</div>
+                <div className="sidebar-item" onClick={() => window.open('http://localhost:8000/api/documents', '_blank')}>
+                  <span className="sidebar-icon">🗄️</span>
+                  <span>View ChromaDB Docs</span>
+                </div>
+                <div className="sidebar-item" onClick={() => window.open('http://localhost:8000/docs', '_blank')}>
+                  <span className="sidebar-icon">📚</span>
+                  <span>API Documentation</span>
+                </div>
+              </div>
+            </aside>
         
         <div className="chat-container">
           <div className="messages-container">
@@ -696,11 +727,21 @@ model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test))
             </div>
           </form>
         </div>
+          </>
+        )}
+        
+        {currentPage === 'docs' && <Docs />}
+        
+        {currentPage === 'settings' && (
+          <div className="settings-container">
+            <div className="settings-content">
+              <h2>⚙️ Settings</h2>
+              <p>Settings page coming soon...</p>
+            </div>
+          </div>
+        )}
       </main>
 
-      <footer className="app-footer">
-        <p>Ai-Tutor v1.0.0 - Research Project</p>
-      </footer>
     </div>
   );
 }

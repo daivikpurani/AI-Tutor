@@ -44,9 +44,9 @@
   --space-2xl: 32px;
   
   /* Border Radius */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
   
   /* Transitions */
   --transition-fast: 150ms ease;
@@ -150,6 +150,9 @@ body {
   font-weight: 500;
   transition: var(--transition-fast);
   cursor: pointer;
+  background: none;
+  border: none;
+  font-family: inherit;
 }
 
 .nav-item:hover {
@@ -229,7 +232,7 @@ body {
 
 /* Sidebar */
 .sidebar {
-  width: 280px;
+  width: 220px;
   background-color: var(--bg-surface);
   border-right: 1px solid var(--border-divider);
   display: flex;
@@ -718,4 +721,35 @@ body {
     font-size: 12px;
     padding: var(--space-md);
   }
+}
+
+/* Settings page styles */
+.settings-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
+  padding: var(--space-2xl);
+}
+
+.settings-content {
+  background: var(--bg-card);
+  padding: var(--space-2xl);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  max-width: 500px;
+  border: 1px solid var(--border-subtle);
+}
+
+.settings-content h2 {
+  color: var(--text-primary);
+  margin-bottom: var(--space-lg);
+  font-size: 24px;
+}
+
+.settings-content p {
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1.5;
 }

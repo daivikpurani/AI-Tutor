@@ -14,6 +14,14 @@ fi
 
 echo "✅ Project structure verified"
 
+# Kill any existing processes on our ports to prevent "address in use" errors
+echo "🧹 Cleaning up existing processes..."
+if [ -f "scripts/kill-processes.sh" ]; then
+    bash scripts/kill-processes.sh
+else
+    echo "⚠️ Process cleanup script not found, continuing anyway..."
+fi
+
 # Start both servers using npm script
 echo "🎯 Starting both servers..."
 echo ""
