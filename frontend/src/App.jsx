@@ -1,5 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import rehypeRaw from 'rehype-raw';
 import './App.css';
+import 'highlight.js/styles/github.css'; // Code highlighting theme
 
 function App() {
   const [messages, setMessages] = useState([
@@ -43,7 +48,7 @@ function App() {
 
   const connectWebSocket = () => {
     try {
-      const ws = new WebSocket('ws://localhost:8001/ws/chat');
+      const ws = new WebSocket('ws://localhost:8000/ws/chat');
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -143,10 +148,206 @@ function App() {
   // Demo mode function for presentation
   const simulateStreamingResponse = async (query) => {
     const demoResponses = {
-      "what is web development": "Web development is the discipline of designing, building, and maintaining websites and web applications that run in a browser. It spans three main areas: (1) front-end development, which focuses on the user interface and experience using HTML for structure, CSS for presentation, and JavaScript for interactivity; (2) back-end development, which handles business logic, data storage, authentication, and APIs using servers, databases, and frameworks; and (3) DevOps/deployment, which covers hosting, CI/CD, monitoring, and scalability on platforms like Vercel, Netlify, or cloud providers.\n\nModern web development emphasizes accessibility (inclusive design and semantic HTML), performance (fast loading and responsive rendering), security (input validation, auth, and HTTPS), and SEO (crawlability and metadata). Common stacks include React/Vue/Svelte on the front-end, Node/Python/Go/Java on the back-end, REST/GraphQL for APIs, and databases like Postgres, MySQL, or MongoDB. The goal is to deliver reliable, accessible, and maintainable experiences across devices and network conditions.",
-      "what is machine learning": "Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed. It involves algorithms that can identify patterns in data and make predictions or decisions based on that data. There are three main types: supervised learning (learning from labeled examples), unsupervised learning (finding patterns in unlabeled data), and reinforcement learning (learning through trial and error with rewards).",
-      "explain ai": "Artificial Intelligence (AI) refers to the simulation of human intelligence in machines that are programmed to think and learn like humans. It encompasses various technologies including machine learning, natural language processing, computer vision, and robotics. AI systems can perform tasks that typically require human intelligence, such as visual perception, speech recognition, decision-making, and language translation.",
-      "how do neural networks work": "Neural networks are computing systems inspired by biological neural networks. They consist of interconnected nodes (neurons) organized in layers. Information flows through the network, with each neuron processing inputs and passing results to the next layer. During training, the network adjusts connection weights to minimize errors. This allows the network to learn complex patterns and make accurate predictions on new data."
+      "what is web development": `# Web Development Overview
+
+Web development is the discipline of designing, building, and maintaining websites and web applications that run in a browser.
+
+## Main Areas
+
+### 1. Front-end Development
+- **Focus**: User interface and experience
+- **Technologies**: HTML, CSS, JavaScript
+- **Purpose**: Structure, presentation, and interactivity
+
+### 2. Back-end Development  
+- **Focus**: Business logic, data storage, authentication
+- **Technologies**: Servers, databases, frameworks
+- **Purpose**: APIs and server-side processing
+
+### 3. DevOps/Deployment
+- **Focus**: Hosting, CI/CD, monitoring, scalability
+- **Platforms**: Vercel, Netlify, cloud providers
+
+## Key Principles
+
+- **Accessibility**: Inclusive design and semantic HTML
+- **Performance**: Fast loading and responsive rendering  
+- **Security**: Input validation, authentication, HTTPS
+- **SEO**: Crawlability and metadata
+
+## Common Tech Stacks
+
+\`\`\`javascript
+// Frontend Example
+const App = () => {
+  const [data, setData] = useState([]);
+  
+  useEffect(() => {
+    fetch('/api/data')
+      .then(res => res.json())
+      .then(setData);
+  }, []);
+  
+  return <div>{data.map(item => <Item key={item.id} {...item} />)}</div>;
+};
+\`\`\`
+
+**Backend**: Node.js, Python, Go, Java  
+**APIs**: REST, GraphQL  
+**Databases**: PostgreSQL, MySQL, MongoDB
+
+> The goal is to deliver reliable, accessible, and maintainable experiences across devices and network conditions.`,
+
+      "what is machine learning": `# Machine Learning Fundamentals
+
+Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed.
+
+## Types of Machine Learning
+
+### 1. Supervised Learning
+- **Definition**: Learning from labeled examples
+- **Examples**: Classification, regression
+- **Use Cases**: Email spam detection, price prediction
+
+### 2. Unsupervised Learning  
+- **Definition**: Finding patterns in unlabeled data
+- **Examples**: Clustering, dimensionality reduction
+- **Use Cases**: Customer segmentation, anomaly detection
+
+### 3. Reinforcement Learning
+- **Definition**: Learning through trial and error with rewards
+- **Examples**: Game playing, robotics
+- **Use Cases**: Autonomous vehicles, recommendation systems
+
+## Key Concepts
+
+\`\`\`python
+# Example: Simple Linear Regression
+from sklearn.linear_model import LinearRegression
+import numpy as np
+
+# Training data
+X = np.array([[1], [2], [3], [4]])
+y = np.array([2, 4, 6, 8])
+
+# Train model
+model = LinearRegression()
+model.fit(X, y)
+
+# Make prediction
+prediction = model.predict([[5]])
+print(f"Prediction: {prediction[0]}")  # Output: 10.0
+\`\`\`
+
+**Key Benefits:**
+- Automated decision making
+- Pattern recognition in large datasets
+- Continuous improvement through experience`,
+
+      "explain ai": `# Artificial Intelligence (AI)
+
+AI refers to the simulation of human intelligence in machines that are programmed to think and learn like humans.
+
+## Core Technologies
+
+| Technology | Description | Applications |
+|------------|-------------|--------------|
+| **Machine Learning** | Algorithms that learn from data | Predictive analytics, recommendation systems |
+| **Natural Language Processing** | Understanding and generating human language | Chatbots, translation, sentiment analysis |
+| **Computer Vision** | Interpreting visual information | Image recognition, autonomous vehicles |
+| **Robotics** | Physical AI systems | Manufacturing, healthcare, exploration |
+
+## AI Capabilities
+
+### Cognitive Functions
+- ✅ **Visual Perception**: Image and video analysis
+- ✅ **Speech Recognition**: Converting speech to text  
+- ✅ **Decision Making**: Strategic planning and optimization
+- ✅ **Language Translation**: Cross-language communication
+
+## Real-World Applications
+
+\`\`\`python
+# Example: Simple AI Chatbot
+import openai
+
+def chat_with_ai(message):
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": message}]
+    )
+    return response.choices[0].message.content
+
+# Usage
+user_input = "Explain quantum computing"
+ai_response = chat_with_ai(user_input)
+print(ai_response)
+\`\`\`
+
+> **Note**: AI systems are becoming increasingly sophisticated and are transforming industries from healthcare to finance through intelligent automation and data-driven decision making.`,
+
+      "how do neural networks work": `# Neural Networks Explained
+
+Neural networks are computing systems inspired by biological neural networks in the human brain.
+
+## Architecture Overview
+
+### Basic Structure
+- **Input Layer**: Receives data
+- **Hidden Layers**: Process information  
+- **Output Layer**: Produces results
+
+\`\`\`python
+# Simple Neural Network Example
+import tensorflow as tf
+from tensorflow import keras
+
+# Create a simple neural network
+model = keras.Sequential([
+    keras.layers.Dense(128, activation='relu', input_shape=(784,)),
+    keras.layers.Dropout(0.2),
+    keras.layers.Dense(10, activation='softmax')
+])
+
+# Compile the model
+model.compile(
+    optimizer='adam',
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+# Train the model
+model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test))
+\`\`\`
+
+## How It Works
+
+### 1. **Forward Propagation**
+- Data flows from input → hidden → output layers
+- Each neuron processes inputs using weights and biases
+- Activation functions determine neuron output
+
+### 2. **Training Process**
+- **Backpropagation**: Adjusts weights based on errors
+- **Gradient Descent**: Minimizes loss function
+- **Iterative Learning**: Improves accuracy over time
+
+## Key Components
+
+| Component | Purpose | Example |
+|-----------|---------|---------|
+| **Weights** | Connection strength between neurons | 0.5, -0.3, 1.2 |
+| **Biases** | Offset values for activation | +0.1, -0.2 |
+| **Activation Functions** | Non-linear transformations | ReLU, Sigmoid, Tanh |
+
+## Applications
+
+- 🧠 **Image Recognition**: Identifying objects in photos
+- 🗣️ **Speech Processing**: Voice commands and transcription  
+- 📈 **Predictive Analytics**: Forecasting trends and patterns
+- 🎮 **Game AI**: Strategic decision making
+
+> Neural networks excel at finding complex patterns in data that would be difficult for traditional algorithms to detect.`
     };
 
     const normalizedQuery = query.toLowerCase().trim();
@@ -212,7 +413,7 @@ function App() {
         }));
       } else {
         // Fallback to HTTP when WebSocket is not connected
-        const response = await fetch('http://localhost:8001/api/chat', {
+        const response = await fetch('http://localhost:8000/api/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -273,44 +474,124 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>🧠 Ai-Tutor</h1>
-        <p>Your intelligent learning assistant</p>
-        <div className="connection-status">
-          <div 
-            className="status-indicator" 
-            style={{ backgroundColor: demoMode ? '#9C27B0' : getConnectionStatusColor() }}
-          ></div>
-          <span className="status-text">
-            {demoMode ? 'Demo Mode' : getConnectionStatusText()}
-          </span>
+        <div className="header-left">
+          <div className="logo">
+            <div className="logo-icon">🧠</div>
+            <span>Ai-Tutor</span>
+          </div>
+          <nav className="header-nav">
+            <a href="#" className="nav-item active">Chat</a>
+            <a href="#" className="nav-item">Docs</a>
+            <a href="#" className="nav-item">Settings</a>
+          </nav>
+        </div>
+        <div className="header-right">
+          <div className="connection-status">
+            <div 
+              className={`status-indicator ${demoMode ? 'demo' : connectionStatus}`}
+            ></div>
+            <span className="status-text">
+              {demoMode ? 'Demo Mode' : getConnectionStatusText()}
+            </span>
+          </div>
           <button 
             className="demo-toggle"
             onClick={() => setDemoMode(!demoMode)}
-            style={{ 
-              marginLeft: '10px', 
-              padding: '2px 8px', 
-              fontSize: '0.7rem',
-              borderRadius: '4px',
-              border: '1px solid rgba(255,255,255,0.3)',
-              background: 'rgba(255,255,255,0.1)',
-              color: 'white',
-              cursor: 'pointer'
-            }}
           >
             {demoMode ? 'Live Mode' : 'Demo Mode'}
           </button>
         </div>
       </header>
 
-      <main className="chat-container">
-        <div className="messages-container">
+      <main className="main-content">
+        <aside className="sidebar">
+          <div className="sidebar-section">
+            <div className="sidebar-title">Navigation</div>
+            <div className="sidebar-item active">
+              <span className="sidebar-icon">💬</span>
+              <span>New Chat</span>
+            </div>
+            <div className="sidebar-item">
+              <span className="sidebar-icon">📚</span>
+              <span>Learning History</span>
+            </div>
+            <div className="sidebar-item">
+              <span className="sidebar-icon">📊</span>
+              <span>Progress</span>
+            </div>
+          </div>
+          
+          <div className="sidebar-section">
+            <div className="sidebar-title">Quick Actions</div>
+            <div className="sidebar-item">
+              <span className="sidebar-icon">🔍</span>
+              <span>Search Topics</span>
+            </div>
+            <div className="sidebar-item">
+              <span className="sidebar-icon">📝</span>
+              <span>Study Notes</span>
+            </div>
+            <div className="sidebar-item">
+              <span className="sidebar-icon">🎯</span>
+              <span>Practice Tests</span>
+            </div>
+          </div>
+          
+          <div className="sidebar-section">
+            <div className="sidebar-title">Settings</div>
+            <div className="sidebar-item">
+              <span className="sidebar-icon">⚙️</span>
+              <span>Preferences</span>
+            </div>
+            <div className="sidebar-item">
+              <span className="sidebar-icon">ℹ️</span>
+              <span>Help & Support</span>
+            </div>
+          </div>
+        </aside>
+        
+        <div className="chat-container">
+          <div className="messages-container">
           {messages.map((message) => (
             <div
               key={message.id}
               className={`message ${message.sender === 'user' ? 'user-message' : 'bot-message'}`}
             >
               <div className="message-content">
-                <div className="message-text">{message.text}</div>
+                <div className="message-text">
+                  {message.sender === 'bot' ? (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeHighlight, rehypeRaw]}
+                      components={{
+                        code({node, inline, className, children, ...props}) {
+                          const match = /language-(\w+)/.exec(className || '');
+                          return !inline && match ? (
+                            <pre className="code-block">
+                              <code className={className} {...props}>
+                                {children}
+                              </code>
+                            </pre>
+                          ) : (
+                            <code className="inline-code" {...props}>
+                              {children}
+                            </code>
+                          );
+                        },
+                        table({children}) {
+                          return <div className="table-wrapper"><table className="markdown-table">{children}</table></div>;
+                        },
+                        blockquote({children}) {
+                          return <blockquote className="markdown-blockquote">{children}</blockquote>;
+                        }
+                      }}
+                    >
+                      {message.text}
+                    </ReactMarkdown>
+                  ) : (
+                    message.text
+                  )}
+                </div>
                 <div className="message-time">{formatTime(message.timestamp)}</div>
               </div>
             </div>
@@ -321,7 +602,34 @@ function App() {
             <div className="message bot-message streaming-message">
               <div className="message-content">
                 <div className="message-text">
-                  {currentStreamingMessage}
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeHighlight, rehypeRaw]}
+                    components={{
+                      code({node, inline, className, children, ...props}) {
+                        const match = /language-(\w+)/.exec(className || '');
+                        return !inline && match ? (
+                          <pre className="code-block">
+                            <code className={className} {...props}>
+                              {children}
+                            </code>
+                          </pre>
+                        ) : (
+                          <code className="inline-code" {...props}>
+                            {children}
+                          </code>
+                        );
+                      },
+                      table({children}) {
+                        return <div className="table-wrapper"><table className="markdown-table">{children}</table></div>;
+                      },
+                      blockquote({children}) {
+                        return <blockquote className="markdown-blockquote">{children}</blockquote>;
+                      }
+                    }}
+                  >
+                    {currentStreamingMessage}
+                  </ReactMarkdown>
                   <span className="streaming-cursor">|</span>
                 </div>
               </div>
@@ -341,59 +649,53 @@ function App() {
           <div ref={messagesEndRef} />
         </div>
 
-        {demoMode && (
-          <div className="demo-suggestions">
-            <p style={{ fontSize: '0.8rem', color: '#666', margin: '0.5rem 0', textAlign: 'center' }}>
-              Try these demo questions:
-            </p>
-            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
-              {['What is machine learning?', 'Explain AI', 'How do neural networks work?', 'What is web development?'].map((suggestion, index) => (
-                <button
-                  key={index}
-                  onClick={() => setInputMessage(suggestion)}
-                  style={{
-                    padding: '0.3rem 0.6rem',
-                    fontSize: '0.7rem',
-                    borderRadius: '12px',
-                    border: '1px solid #e0e0e0',
-                    background: '#f5f5f5',
-                    color: '#333',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseOver={(e) => {
-                    e.target.style.background = '#e0e0e0';
-                  }}
-                  onMouseOut={(e) => {
-                    e.target.style.background = '#f5f5f5';
-                  }}
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
+        <div className="demo-suggestions">
+          <p>{demoMode ? 'Try these demo questions:' : 'Suggested questions to get started:'}</p>
+          <div className="suggestion-buttons">
+            {(demoMode ? [
+              'What is machine learning?', 
+              'Explain AI', 
+              'How do neural networks work?', 
+              'What is web development?'
+            ] : [
+              'What topics can you help me learn?',
+              'How does this AI tutoring system work?',
+              'Can you explain a concept step by step?',
+              'What study materials do you have?',
+              'Help me understand a difficult topic',
+              'Create a study plan for me'
+            ]).map((suggestion, index) => (
+              <button
+                key={index}
+                onClick={() => setInputMessage(suggestion)}
+                className="suggestion-button"
+              >
+                {suggestion}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
 
-        <form className="input-form" onSubmit={handleSendMessage}>
-          <div className="input-container">
-            <input
-              type="text"
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              placeholder={demoMode ? "Try the demo questions above or ask anything..." : "Ask me anything about your course material..."}
-              className="message-input"
-              disabled={isLoading}
-            />
-            <button
-              type="submit"
-              className="send-button"
-              disabled={!inputMessage.trim() || isLoading}
-            >
-              {isLoading ? '⏳' : '📤'}
-            </button>
-          </div>
-        </form>
+          <form className="input-form" onSubmit={handleSendMessage}>
+            <div className="input-container">
+              <input
+                type="text"
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                placeholder={demoMode ? "Try the demo questions above or ask anything..." : "Ask me anything about your course material..."}
+                className="message-input"
+                disabled={isLoading}
+              />
+              <button
+                type="submit"
+                className="send-button"
+                disabled={!inputMessage.trim() || isLoading}
+              >
+                {isLoading ? '⏳' : '📤'}
+              </button>
+            </div>
+          </form>
+        </div>
       </main>
 
       <footer className="app-footer">

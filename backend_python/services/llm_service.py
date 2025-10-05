@@ -87,7 +87,8 @@ class OpenAIProvider(BaseLLMProvider):
     async def initialize(self) -> bool:
         """Initialize OpenAI client."""
         try:
-            api_key = os.getenv('OPENAI_API_KEY')
+            from utils.config import settings
+            api_key = settings.openai_api_key
             if not api_key:
                 logger.warning("OPENAI_API_KEY not found")
                 return False

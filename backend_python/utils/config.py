@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     debug: bool = False
+    environment: str = "development"
     
     # Database Configuration
     chroma_persist_directory: str = "./chroma_db"
@@ -29,6 +30,10 @@ class Settings(BaseSettings):
     openai_max_tokens: int = 1000
     openai_temperature: float = 0.7
     
+    # Ollama Configuration
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_default_model: str = "llama2"
+    
     # Document Processing
     chunk_size: int = 1000
     chunk_overlap: int = 200
@@ -39,12 +44,11 @@ class Settings(BaseSettings):
     max_context_chunks: int = 5
     
     # CORS Configuration
-    cors_origins: list = [
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173"
-    ]
+    cors_origins: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
+    
+    def get_cors_origins(self) -> list:
+        """Convert comma-separated CORS origins to list."""
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
     
     # File Upload Configuration
     upload_directory: str = "temp_uploads"
@@ -73,4 +77,4 @@ if os.getenv("ENVIRONMENT") == "development":
 elif os.getenv("ENVIRONMENT") == "production":
     settings.debug = False
     settings.log_level = "WARNING"
-    settings.cors_origins = ["https://yourdomain.com"]  # Update for production
+    settings.cors_origins = "https://yourdomain.com"  # Update for production

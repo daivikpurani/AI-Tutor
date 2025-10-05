@@ -6,13 +6,13 @@ python-multipart==0.0.6
 
 # Vector Database
 chromadb==0.4.18
-sentence-transformers==2.2.2
+sentence-transformers>=2.6.0
 
 # LLM and AI libraries
-openai==1.3.0
+openai>=1.6.1
 langchain==0.0.350
 langchain-openai==0.0.2
-tiktoken==0.5.1
+tiktoken>=0.5.2
 ollama==0.1.7
 
 # Document processing
@@ -28,9 +28,10 @@ python-dotenv==1.0.0
 # HTTP and async
 httpx==0.25.2
 aiofiles==23.2.1
+urllib3<2.0.0
 
 # CORS and middleware
-python-cors==1.7.0
+# CORS is handled by FastAPI's built-in CORS middleware
 
 # Testing
 pytest==7.4.3

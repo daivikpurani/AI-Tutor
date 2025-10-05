@@ -3,7 +3,7 @@ Ai-Tutor FastAPI Backend
 Main application entry point with all API routes and WebSocket support.
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -30,7 +30,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:5173"],  # React dev servers
+    allow_origins=settings.get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -139,6 +139,110 @@ async def upload_file(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
+@app.post("/api/upload-direct")
+async def upload_document_direct(
+    text: str = Form(...),
+    filename: str = Form(...),
+    file_type: str = Form("text"),
+    source: str = Form("direct_upload")
+):
+    """
+    Upload document text directly to the main collection without chunking.
+    Useful for adding structured content, notes, or small documents.
+    """
+    try:
+        if not text.strip():
+            raise HTTPException(status_code=400, detail="Text content cannot be empty")
+        
+        if not filename.strip():
+            raise HTTPException(status_code=400, detail="Filename cannot be empty")
+        
+        # Prepare metadata
+        metadata = {
+            "file_type": file_type,
+            "source": source,
+            "upload_method": "direct_api"
+        }
+        
+        # Add document directly to collection
+        success = await vector_db.add_document_direct(
+            text=text,
+            filename=filename,
+            metadata=metadata
+        )
+        
+        if success:
+            return {
+                "message": f"Successfully uploaded '{filename}' directly to collection",
+                "filename": filename,
+                "content_length": len(text),
+                "status": "success",
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to upload document")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+@app.post("/api/upload-text")
+async def upload_text_content(
+    content: str = Form(...),
+    title: str = Form(...),
+    description: str = Form(""),
+    category: str = Form("general")
+):
+    """
+    Upload text content with structured metadata.
+    Alternative endpoint for uploading formatted text content.
+    """
+    try:
+        if not content.strip():
+            raise HTTPException(status_code=400, detail="Content cannot be empty")
+        
+        if not title.strip():
+            raise HTTPException(status_code=400, detail="Title cannot be empty")
+        
+        # Create filename from title
+        filename = f"{title.replace(' ', '_').lower()}.txt"
+        
+        # Prepare metadata
+        metadata = {
+            "file_type": "text",
+            "source": "text_upload",
+            "title": title,
+            "description": description,
+            "category": category,
+            "upload_method": "text_api"
+        }
+        
+        # Add document directly to collection
+        success = await vector_db.add_document_direct(
+            text=content,
+            filename=filename,
+            metadata=metadata
+        )
+        
+        if success:
+            return {
+                "message": f"Successfully uploaded text content '{title}'",
+                "filename": filename,
+                "title": title,
+                "content_length": len(content),
+                "category": category,
+                "status": "success",
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to upload text content")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
 @app.get("/api/documents")
 async def list_documents():
     """List all uploaded documents."""
@@ -147,6 +251,15 @@ async def list_documents():
         return {"documents": documents}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error listing documents: {str(e)}")
+
+@app.get("/api/db-stats")
+async def get_database_stats():
+    """Get comprehensive database statistics."""
+    try:
+        stats = await vector_db.get_database_stats()
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting database stats: {str(e)}")
 
 @app.get("/api/test-db")
 async def test_database_connection():
@@ -270,6 +383,40 @@ async def delete_document(document_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting document: {str(e)}")
 
+@app.post("/api/backup-db")
+async def backup_database():
+    """Create a backup of the ChromaDB database."""
+    try:
+        backup_path = f"backups/chromadb_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        os.makedirs("backups", exist_ok=True)
+        
+        success = await vector_db.backup_database(backup_path)
+        if success:
+            return {
+                "message": "Database backup created successfully",
+                "backup_path": backup_path,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to create backup")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Backup failed: {str(e)}")
+
+@app.post("/api/reset-db")
+async def reset_database():
+    """Reset the entire database (delete all data)."""
+    try:
+        success = await vector_db.reset_database()
+        if success:
+            return {
+                "message": "Database reset successfully",
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to reset database")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")
+
 # WebSocket endpoint for real-time chat with streaming
 @app.websocket("/ws/chat")
 async def websocket_endpoint(websocket: WebSocket):
@@ -319,7 +466,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8001,
+        port=8000,  # Fixed port to 8000
         reload=True,
         log_level="info"
     )

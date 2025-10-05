@@ -1,0 +1,578 @@
+{
+	"info": {
+		"_postman_id": "ai-tutor-api-collection",
+		"name": "Ai-Tutor FastAPI Backend",
+		"description": "Complete API collection for Ai-Tutor FastAPI backend with ChromaDB vector database integration",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "ai-tutor"
+	},
+	"item": [
+		{
+			"name": "Health & Status",
+			"item": [
+				{
+					"name": "Root Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Basic health check endpoint that returns API information"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										""
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "content-type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"message\": \"Ai-Tutor Backend API\",\n  \"status\": \"running\",\n  \"version\": \"1.0.0\",\n  \"docs\": \"/docs\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Detailed Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"health"
+							]
+						},
+						"description": "Detailed health check with service status information"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/health",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"health"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "content-type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"status\": \"healthy\",\n  \"timestamp\": \"2024-01-01T12:00:00.000Z\",\n  \"services\": {\n    \"vector_db\": \"healthy\",\n    \"query_handler\": \"healthy\"\n  }\n}"
+						}
+					]
+				}
+			],
+			"description": "Health check and status endpoints"
+		},
+		{
+			"name": "Chat & Query",
+			"item": [
+				{
+					"name": "Chat Message",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message\": \"What is machine learning?\",\n  \"user_id\": \"user123\",\n  \"conversation_history\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/chat",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"chat"
+							]
+						},
+						"description": "Send a chat message to the AI tutor"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"message\": \"What is machine learning?\",\n  \"user_id\": \"user123\",\n  \"conversation_history\": []\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/chat",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"chat"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "content-type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"response\": \"Machine learning is a subset of artificial intelligence that focuses on algorithms and statistical models that enable computer systems to improve their performance on a specific task through experience...\",\n  \"query\": \"What is machine learning?\",\n  \"user_id\": \"user123\",\n  \"timestamp\": \"2024-01-01T12:00:00.000Z\",\n  \"context_chunks_used\": 3,\n  \"status\": \"success\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Chat with History",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message\": \"Can you explain supervised learning?\",\n  \"user_id\": \"user123\",\n  \"conversation_history\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"What is machine learning?\",\n      \"timestamp\": \"2024-01-01T11:55:00.000Z\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"Machine learning is a subset of artificial intelligence...\",\n      \"timestamp\": \"2024-01-01T11:55:30.000Z\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/chat",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"chat"
+							]
+						},
+						"description": "Send a chat message with conversation history for context"
+					},
+					"response": []
+				},
+				{
+					"name": "Test Query",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message\": \"What topics are covered in the uploaded documents?\",\n  \"user_id\": \"test-user\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/test-query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"test-query"
+							]
+						},
+						"description": "Test endpoint for query processing - useful for testing database connection"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"message\": \"What topics are covered in the uploaded documents?\",\n  \"user_id\": \"test-user\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/test-query",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"test-query"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "content-type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"test_status\": \"success\",\n  \"query\": \"What topics are covered in the uploaded documents?\",\n  \"response\": \"Based on the uploaded documents, the following topics are covered...\",\n  \"context_chunks_used\": 5,\n  \"timestamp\": \"2024-01-01T12:00:00.000Z\",\n  \"processing_time\": \"calculated_in_backend\"\n}"
+						}
+					]
+				}
+			],
+			"description": "Chat and query processing endpoints"
+		},
+		{
+			"name": "Document Management",
+			"item": [
+				{
+					"name": "Upload Document",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": [],
+									"description": "Select a PDF, DOCX, or text file to upload"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/upload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"upload"
+							]
+						},
+						"description": "Upload and process documents for the vector database"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "file",
+											"type": "file",
+											"src": "sample_document.pdf"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/api/upload",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"upload"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "content-type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"message\": \"Successfully processed sample_document.pdf\",\n  \"filename\": \"sample_document.pdf\",\n  \"chunks_created\": 15,\n  \"status\": \"success\"\n}"
+						}
+					]
+				},
+				{
+					"name": "List Documents",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/documents",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"documents"
+							]
+						},
+						"description": "List all uploaded documents in the vector database"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/documents",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"documents"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "content-type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"documents\": [\n    {\n      \"filename\": \"machine_learning_basics.pdf\",\n      \"chunk_count\": 25,\n      \"upload_date\": \"2024-01-01T10:00:00.000Z\"\n    },\n    {\n      \"filename\": \"deep_learning_guide.docx\",\n      \"chunk_count\": 18,\n      \"upload_date\": \"2024-01-01T11:30:00.000Z\"\n    }\n  ]\n}"
+						}
+					]
+				},
+				{
+					"name": "Delete Document",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/documents/{{document_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"documents",
+								"{{document_id}}"
+							]
+						},
+						"description": "Delete a specific document from the vector database"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/documents/doc_123",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"documents",
+										"doc_123"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "content-type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"message\": \"Document doc_123 deleted successfully\"\n}"
+						}
+					]
+				}
+			],
+			"description": "Document upload, listing, and management endpoints"
+		},
+		{
+			"name": "Testing & Debug",
+			"item": [
+				{
+					"name": "Test Database Connection",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/test-db",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"test-db"
+							]
+						},
+						"description": "Comprehensive database connection and functionality test"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/test-db",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"test-db"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "content-type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"database_status\": \"connected\",\n  \"timestamp\": \"2024-01-01T12:00:00.000Z\",\n  \"overall_status\": \"passed\",\n  \"tests\": {\n    \"health_check\": {\n      \"status\": \"passed\",\n      \"result\": \"healthy\"\n    },\n    \"list_documents\": {\n      \"status\": \"passed\",\n      \"document_count\": 2,\n      \"documents\": [\n        {\n          \"filename\": \"ml_basics.pdf\",\n          \"chunk_count\": 15\n        }\n      ]\n    },\n    \"search_functionality\": {\n      \"status\": \"passed\",\n      \"query\": \"test query\",\n      \"results_count\": 3,\n      \"sample_results\": [\n        {\n          \"text\": \"Sample document content...\",\n          \"metadata\": {\n            \"filename\": \"ml_basics.pdf\"\n          }\n        }\n      ]\n    },\n    \"query_handler\": {\n      \"status\": \"passed\",\n      \"response_length\": 150,\n      \"context_chunks_used\": 2\n    }\n  }\n}"
+						}
+					]
+				}
+			],
+			"description": "Testing and debugging endpoints"
+		},
+		{
+			"name": "API Documentation",
+			"item": [
+				{
+					"name": "Swagger UI",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/docs",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"docs"
+							]
+						},
+						"description": "Interactive Swagger UI documentation"
+					},
+					"response": []
+				},
+				{
+					"name": "ReDoc Documentation",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/redoc",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"redoc"
+							]
+						},
+						"description": "Alternative API documentation in ReDoc format"
+					},
+					"response": []
+				}
+			],
+			"description": "API documentation endpoints"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "document_id",
+			"value": "sample_document_id",
+			"type": "string"
+		}
+	]
+}

@@ -22,10 +22,10 @@ This document contains comprehensive technical details for developers working on
 git clone https://github.com/daivikpurani/Ai-Tutor.git
 cd Ai-Tutor
 npm run setup
-cp env.example .env
+cp backend_python/env.example backend_python/.env
 
 # Configure environment variables
-# Edit .env with your API keys
+# Edit backend_python/.env with your API keys
 
 # Start development servers
 npm run dev
@@ -33,6 +33,7 @@ npm run dev
 # Access the application
 # Frontend: http://localhost:3000
 # Backend API: http://localhost:8000
+# API Documentation: http://localhost:8000/docs
 ```
 
 ## Development Environment Setup
@@ -52,12 +53,12 @@ Before starting development, obtain the following API keys:
 1. **OpenAI API Key** (Primary LLM)
    - Sign up at: https://platform.openai.com/
    - Create API key in dashboard
-   - Add to `.env` as `OPENAI_API_KEY`
+   - Add to `backend_python/.env` as `OPENAI_API_KEY`
 
-2. **ChaiJibri API Key** (Alternative LLM, optional)
-   - Sign up at: https://chaibri.com/
-   - Get API key from dashboard
-   - Add to `.env` as `CHAIBRI_API_KEY`
+2. **Ollama** (Optional - Local LLM)
+   - Install Ollama: https://ollama.ai/
+   - Download a model: `ollama pull llama2`
+   - Configure in `.env` as `OLLAMA_BASE_URL=http://localhost:11434`
 
 ### Installation Steps
 
@@ -72,7 +73,7 @@ npm run setup
 npm install
 
 # Install backend dependencies
-   cd backend_python && pip install -r requirements.txt && cd ..
+cd backend_python && pip install -r requirements.txt && cd ..
 
 # Install frontend dependencies
 cd frontend && npm install && cd ..
@@ -86,24 +87,40 @@ pip install -r scripts/requirements.txt
 Copy the example environment file and configure:
 
 ```bash
-cp env.example .env
+cp backend_python/env.example backend_python/.env
 ```
 
-Edit `.env` with your actual API keys and configuration:
+Edit `backend_python/.env` with your actual API keys and configuration:
 
 ```env
 # Required API Keys
 OPENAI_API_KEY=sk-your-openai-key-here
-CHAIBRI_API_KEY=your-chaibri-key-here
 
-# Database (optional for development)
-MONGODB_URI=mongodb://localhost:27017/ai-tutor
-DATABASE_URL=postgresql://username:password@localhost:5432/ai_tutor
+# Ollama Configuration (optional)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_DEFAULT_MODEL=llama2
 
 # Server Configuration
-PORT=3001
-NODE_ENV=development
-REACT_APP_API_URL=http://localhost:8000
+ENVIRONMENT=development
+DEBUG=true
+HOST=0.0.0.0
+PORT=8000
+
+# Database Configuration
+CHROMA_PERSIST_DIRECTORY=./chroma_db
+VECTOR_DB_COLLECTION_NAME=ai_tutor_documents
+
+# Document Processing
+CHUNK_SIZE=1000
+CHUNK_OVERLAP=200
+MAX_FILE_SIZE=10485760
+
+# Vector Search Configuration
+SIMILARITY_THRESHOLD=0.8
+MAX_CONTEXT_CHUNKS=5
+
+# CORS Origins
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 ```
 
 ## Project Architecture
@@ -112,9 +129,9 @@ REACT_APP_API_URL=http://localhost:8000
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Backend       │    │   Python        │
-│   (React)       │◄──►│   (Node.js)     │◄──►│   Scripts       │
-│   Port: 3000    │    │   Port: 3001    │    │   (AI/ML)       │
+│   Frontend      │    │   Backend       │    │   Vector DB     │
+│   (React/Vite)  │◄──►│   (FastAPI)     │◄──►│   (ChromaDB)    │
+│   Port: 3000    │    │   Port: 8000    │    │   (Local)       │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
          │                       │                       │
@@ -123,28 +140,31 @@ REACT_APP_API_URL=http://localhost:8000
 │   Chatbot UI    │    │   REST API      │    │   Document       │
 │   - Messages    │    │   - /api/chat   │    │   Processing     │
 │   - Input       │    │   - /api/upload │    │   - Chunking     │
-│   - History     │    │   - /api/health │    │   - Embeddings   │
+│   - History     │    │   - /ws/chat    │    │   - Embeddings   │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
 ### Component Details
 
-#### Frontend (React)
+#### Frontend (React + Vite)
 - **Location**: `frontend/`
 - **Port**: 3000
 - **Main Component**: `src/App.jsx`
 - **Styling**: `src/App.css`
+- **Build Tool**: Vite
 - **Proxy**: Configured to proxy API calls to backend
 
-#### Backend (Node.js/Express)
-- **Location**: `backend/`
-- **Port**: 3001
-- **Main File**: `index.js`
-- **Routes**:
-  - `GET /` - Health check
-  - `POST /api/chat` - Chat endpoint
-  - `POST /api/upload` - File upload
-  - `GET /api/health` - System health
+#### Backend (FastAPI)
+- **Location**: `backend_python/`
+- **Port**: 8000
+- **Main File**: `main.py`
+- **Framework**: FastAPI with WebSocket support
+- **Documentation**: Auto-generated at `/docs`
+
+#### Vector Database (ChromaDB)
+- **Location**: `backend_python/chroma_db/`
+- **Type**: Local persistent vector database
+- **Purpose**: Document embeddings and similarity search
 
 #### Python Scripts
 - **Location**: `scripts/`
@@ -154,7 +174,7 @@ REACT_APP_API_URL=http://localhost:8000
 
 ## API Documentation
 
-### Backend API Endpoints
+### FastAPI Backend Endpoints
 
 #### Health Check
 ```http
@@ -165,7 +185,8 @@ GET /
 {
   "message": "Ai-Tutor Backend API",
   "status": "running",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "docs": "/docs"
 }
 ```
 
@@ -176,16 +197,19 @@ Content-Type: application/json
 
 {
   "message": "What is machine learning?",
-  "userId": "user123"
+  "user_id": "user123",
+  "conversation_history": []
 }
 ```
 
 **Response:**
 ```json
 {
-  "message": "Based on the course material, here's what I found...",
-  "userId": "user123",
+  "response": "Based on the course material, here's what I found...",
+  "query": "What is machine learning?",
+  "user_id": "user123",
   "timestamp": "2024-01-01T12:00:00.000Z",
+  "context_chunks_used": 3,
   "status": "success"
 }
 ```
@@ -201,94 +225,65 @@ file: [binary data]
 **Response:**
 ```json
 {
-  "message": "File upload endpoint - placeholder",
+  "message": "Successfully processed document.pdf",
+  "filename": "document.pdf",
+  "chunks_created": 15,
   "status": "success"
 }
 ```
 
-#### Health Check
+#### WebSocket Chat
+```javascript
+const ws = new WebSocket('ws://localhost:8000/ws/chat');
+ws.send(JSON.stringify({
+  "message": "Hello",
+  "user_id": "user123"
+}));
+```
+
+#### Document Management
 ```http
-GET /api/health
+GET /api/documents          # List all documents
+DELETE /api/documents/{id}  # Delete specific document
 ```
 
-**Response:**
-```json
-{
-  "status": "healthy",
-  "timestamp": "2024-01-01T12:00:00.000Z"
-}
+#### Testing Endpoints
+```http
+GET /api/test-db           # Test database connection
+POST /api/test-query       # Test query processing
 ```
 
-### Python Scripts API
+### Interactive API Documentation
 
-#### Document Chunker
-```python
-from chunker import DocumentChunker
-
-chunker = DocumentChunker(chunk_size=1000, chunk_overlap=200)
-chunks = chunker.chunk_text("Your document text here...")
-```
-
-#### Query Handler
-```python
-from query_handler import QueryHandler
-
-handler = QueryHandler()
-response = handler.process_query("What is AI?", user_id="user123")
-```
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
 
 ## Database Schema
 
-### Current Status
-- **Database**: Not yet implemented
-- **Storage**: File-based for development
-- **Future**: MongoDB/PostgreSQL integration planned
+### ChromaDB Vector Database
 
-### Planned Schema
+The system uses ChromaDB as a local persistent vector database for storing document embeddings.
 
-#### Users Collection
-```javascript
+#### Document Storage
+```python
+# Document chunks are stored with metadata
 {
-  _id: ObjectId,
-  userId: String,
-  email: String,
-  role: String, // 'student', 'instructor', 'admin'
-  createdAt: Date,
-  lastActive: Date
+  "id": "document_chunk_1",
+  "text": "Document content chunk...",
+  "metadata": {
+    "filename": "course_material.pdf",
+    "chunk_index": 0,
+    "page_number": 1,
+    "upload_date": "2024-01-01T12:00:00Z"
+  },
+  "embedding": [0.1, 0.2, 0.3, ...]  # Vector embedding
 }
 ```
 
-#### Conversations Collection
-```javascript
-{
-  _id: ObjectId,
-  userId: String,
-  messages: [{
-    role: String, // 'user', 'assistant'
-    content: String,
-    timestamp: Date
-  }],
-  createdAt: Date,
-  updatedAt: Date
-}
-```
-
-#### Documents Collection
-```javascript
-{
-  _id: ObjectId,
-  filename: String,
-  filePath: String,
-  chunks: [{
-    chunkId: Number,
-    text: String,
-    embeddings: [Number],
-    metadata: Object
-  }],
-  uploadedBy: String,
-  uploadedAt: Date
-}
-```
+#### Collection Structure
+- **Collection Name**: `ai_tutor_documents`
+- **Embedding Model**: `sentence-transformers/all-MiniLM-L6-v2`
+- **Persistence**: Local SQLite database in `chroma_db/`
 
 ## Development Workflow
 
@@ -326,12 +321,14 @@ npm run dev:backend      # Start backend only
 npm run dev:frontend     # Start frontend only
 npm run build            # Build frontend for production
 npm run test             # Run all tests
+npm run test:backend     # Run backend tests
+npm run test:frontend    # Run frontend tests
 npm run setup            # Install all dependencies
-npm run python:chunker   # Test document chunker
-npm run python:query     # Test query handler
 npm run python:test      # Run Python tests
+npm run python:chunker  # Test document chunker
+npm run python:query     # Test query handler
 npm run clean            # Remove all node_modules
-npm run fresh-install    # Clean and reinstall everything
+npm run fresh-install   # Clean and reinstall everything
 ```
 
 #### Backend Scripts
@@ -339,8 +336,7 @@ npm run fresh-install    # Clean and reinstall everything
 cd backend_python
 python main.py              # Start development server
 uvicorn main:app --reload   # Alternative with auto-reload
-npm run test             # Run Jest tests
-npm run test:watch       # Run tests in watch mode
+python -m pytest           # Run tests
 ```
 
 #### Frontend Scripts
@@ -348,8 +344,8 @@ npm run test:watch       # Run tests in watch mode
 cd frontend
 npm start                # Start development server
 npm run build            # Build for production
-npm run test             # Run React tests
-npm run eject            # Eject from Create React App
+npm run preview          # Preview production build
+npm test                 # Run tests
 ```
 
 ### Code Structure
@@ -360,18 +356,32 @@ frontend/
 ├── src/
 │   ├── App.jsx          # Main chatbot component
 │   ├── App.css          # Chatbot styles
-│   ├── index.js         # React entry point
+│   ├── index.jsx        # React entry point
 │   └── index.css        # Global styles
 ├── public/
 │   └── index.html       # HTML template
+├── vite.config.js      # Vite configuration
 └── package.json         # Dependencies
 ```
 
 #### Backend Structure
 ```
-backend/
-├── index.js             # Express server
-└── package.json         # Dependencies
+backend_python/
+├── main.py              # FastAPI application entry point
+├── requirements.txt     # Python dependencies
+├── start.sh            # Startup script
+├── env.example         # Environment configuration template
+├── services/
+│   ├── query_handler.py   # Enhanced query processing with LLM
+│   ├── vector_db.py       # ChromaDB integration
+│   ├── document_chunker.py # Enhanced document processing
+│   └── llm_service.py     # LLM service integration
+├── models/
+│   └── schemas.py         # Pydantic data models
+├── utils/
+│   ├── config.py          # Configuration settings
+│   └── prompts.py         # LLM prompt templates
+└── chroma_db/             # ChromaDB data directory (auto-created)
 ```
 
 #### Python Scripts Structure
@@ -392,8 +402,9 @@ python -m pytest
 
 **Test Structure:**
 - Unit tests for API endpoints
-- Integration tests for database operations
+- Integration tests for ChromaDB operations
 - Mock tests for external API calls
+- WebSocket connection tests
 
 ### Frontend Testing
 ```bash
@@ -425,7 +436,8 @@ npm test
 ## Deployment
 
 ### Current Status
-- **Environment**: Local development only
+- **Environment**: Local development
+- **Database**: Local ChromaDB
 - **CI/CD**: Not implemented
 - **Cloud**: Not configured
 
@@ -434,21 +446,22 @@ npm test
 #### Docker Setup
 ```dockerfile
 # Dockerfile (planned)
-FROM node:18-alpine
+FROM python:3.9-slim
 WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-EXPOSE 3001
-CMD ["npm", "start"]
+COPY backend_python/requirements.txt .
+RUN pip install -r requirements.txt
+COPY backend_python/ .
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 #### Environment Variables for Production
 ```env
-NODE_ENV=production
-PORT=3001
+ENVIRONMENT=production
+DEBUG=false
+PORT=8000
 OPENAI_API_KEY=prod-key
-DATABASE_URL=prod-database-url
+CHROMA_PERSIST_DIRECTORY=/app/data/chroma_db
 ```
 
 #### Deployment Commands
@@ -457,7 +470,8 @@ DATABASE_URL=prod-database-url
 npm run build
 
 # Start production server
-npm start
+cd backend_python
+uvicorn main:app --host 0.0.0.0 --port 8000
 
 # Run with PM2 (process manager)
 pm2 start backend_python/main.py --name "ai-tutor"
@@ -469,22 +483,23 @@ pm2 start backend_python/main.py --name "ai-tutor"
 
 #### 1. Port Already in Use
 ```bash
-# Error: Port 3000 or 3001 already in use
+# Error: Port 3000 or 8000 already in use
 # Solution: Kill processes using the ports
 lsof -ti:3000 | xargs kill -9
-lsof -ti:3001 | xargs kill -9
+lsof -ti:8000 | xargs kill -9
 ```
 
 #### 2. Python Import Errors
 ```bash
 # Error: ModuleNotFoundError
 # Solution: Install Python dependencies
-pip install -r scripts/requirements.txt
+cd backend_python
+pip install -r requirements.txt
 
 # Or use virtual environment
 python3 -m venv venv
 source venv/bin/activate
-pip install -r scripts/requirements.txt
+pip install -r requirements.txt
 ```
 
 #### 3. API Connection Issues
@@ -494,18 +509,26 @@ pip install -r scripts/requirements.txt
 curl http://localhost:8000/api/health
 
 # Check environment variables
-cat .env | grep REACT_APP_API_URL
+cat backend_python/.env | grep OPENAI_API_KEY
 ```
 
-#### 4. Missing Dependencies
+#### 4. ChromaDB Issues
+```bash
+# Error: ChromaDB connection failed
+# Solution: Check database directory permissions
+ls -la backend_python/chroma_db/
+
+# Reset database if corrupted
+rm -rf backend_python/chroma_db/
+mkdir backend_python/chroma_db/
+```
+
+#### 5. Missing Dependencies
 ```bash
 # Error: Cannot find module
 # Solution: Reinstall dependencies
-rm -rf node_modules package-lock.json
-npm install
-
-# For Python
-pip install --upgrade -r scripts/requirements.txt
+rm -rf node_modules frontend/node_modules package-lock.json frontend/package-lock.json
+npm run fresh-install
 ```
 
 ### Debug Mode
@@ -513,10 +536,11 @@ pip install --upgrade -r scripts/requirements.txt
 #### Backend Debug
 ```bash
 # Enable debug logging
-DEBUG=* npm run dev:backend
+cd backend_python
+DEBUG=true python main.py
 
-# Or with specific debug namespace
-DEBUG=ai-tutor:* npm run dev:backend
+# Or with uvicorn
+uvicorn main:app --reload --log-level debug
 ```
 
 #### Frontend Debug
@@ -529,7 +553,8 @@ DEBUG=ai-tutor:* npm run dev:backend
 #### Python Debug
 ```bash
 # Enable Python debug mode
-python3 -m pdb chunker.py
+cd backend_python
+python -m pdb main.py
 
 # Or add debug prints
 import pdb; pdb.set_trace()
@@ -538,9 +563,9 @@ import pdb; pdb.set_trace()
 ### Log Files
 
 #### Backend Logs
-- **Location**: `./logs/ai-tutor.log`
+- **Location**: Console output
 - **Level**: Set by `LOG_LEVEL` environment variable
-- **Rotation**: Configured for daily rotation
+- **Format**: Structured JSON logs
 
 #### Frontend Logs
 - **Browser Console**: F12 → Console tab
@@ -550,26 +575,21 @@ import pdb; pdb.set_trace()
 
 ### Code Standards
 
-#### JavaScript/Node.js
+#### Python (FastAPI)
+- Follow PEP 8 style guide
+- Use type hints for all functions
+- Add docstrings for functions and classes
+- Use meaningful variable names
+- Handle exceptions properly
+- Use async/await for I/O operations
+
+#### JavaScript/React
 - Use ES6+ syntax
 - Follow Airbnb JavaScript Style Guide
 - Use meaningful variable names
 - Add JSDoc comments for functions
-- Use async/await instead of callbacks
-
-#### Python
-- Follow PEP 8 style guide
-- Use type hints where possible
-- Add docstrings for functions and classes
-- Use meaningful variable names
-- Handle exceptions properly
-
-#### React
 - Use functional components with hooks
-- Use meaningful component names
 - Keep components small and focused
-- Use PropTypes or TypeScript for type checking
-- Follow React best practices
 
 ### Git Workflow
 
@@ -637,15 +657,16 @@ docs(readme): update installation instructions
 ## Additional Resources
 
 ### Documentation Links
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [React Documentation](https://reactjs.org/docs/)
-- [Express.js Documentation](https://expressjs.com/)
+- [ChromaDB Documentation](https://docs.trychroma.com/)
 - [OpenAI API Documentation](https://platform.openai.com/docs)
-
+- [Vite Documentation](https://vitejs.dev/)
 
 ### Development Tools
-- **IDE**: VS Code with React and Python extensions
+- **IDE**: VS Code with Python and React extensions
 - **API Testing**: Postman or Insomnia
-- **Database**: MongoDB Compass or pgAdmin
+- **Database**: ChromaDB Studio (if available)
 - **Version Control**: Git with GitHub
 
 ### Support
@@ -656,4 +677,4 @@ docs(readme): update installation instructions
 ---
 
 *Last updated: January 2024*
-*Version: 1.0.0*
+*Version: 2.0.0 - FastAPI Migration*

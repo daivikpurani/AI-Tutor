@@ -1,0 +1,69 @@
+{
+	"id": "ai-tutor-environment",
+	"name": "Ai-Tutor Development Environment",
+	"values": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "base_url_production",
+			"value": "https://your-production-domain.com",
+			"type": "default",
+			"enabled": false
+		},
+		{
+			"key": "frontend_url",
+			"value": "http://localhost:3000",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "user_id",
+			"value": "test_user_123",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "document_id",
+			"value": "sample_document_id",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "test_message",
+			"value": "What is machine learning?",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "test_file_path",
+			"value": "/path/to/test/document.pdf",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "websocket_url",
+			"value": "ws://localhost:8000/ws/chat",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "api_key",
+			"value": "your-openai-api-key-here",
+			"type": "secret",
+			"enabled": true
+		},
+		{
+			"key": "auth_token",
+			"value": "",
+			"type": "secret",
+			"enabled": false
+		}
+	],
+	"_postman_variable_scope": "environment",
+	"_postman_exported_at": "2024-01-01T12:00:00.000Z",
+	"_postman_exported_using": "Postman/10.0.0"
+}

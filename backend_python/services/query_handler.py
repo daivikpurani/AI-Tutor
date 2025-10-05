@@ -131,10 +131,10 @@ class QueryHandler:
         try:
             context_chunks = await self.vector_db.search_similar(query, n_results)
             
-            # Filter out low-relevance chunks (distance > 0.8)
+            # Filter out low-relevance chunks (distance > 2.0 for ChromaDB)
             filtered_chunks = [
                 chunk for chunk in context_chunks 
-                if chunk.get('distance', 1.0) < 0.8
+                if chunk.get('distance', 1.0) < 2.0
             ]
             
             logger.info(f"Retrieved {len(filtered_chunks)} relevant context chunks")
