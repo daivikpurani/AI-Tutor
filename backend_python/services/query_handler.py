@@ -63,7 +63,8 @@ class QueryHandler:
         self, 
         query: str, 
         user_id: str = None, 
-        conversation_history: List[Dict] = None
+        conversation_history: List[Dict] = None,
+        mode: str = "exploration"
     ) -> Dict[str, Any]:
         """
         Process a user query and return a response.
@@ -72,6 +73,7 @@ class QueryHandler:
             query: User's question or input
             user_id: Unique identifier for the user
             conversation_history: Previous conversation context
+            mode: Learning mode ('exploration' or 'assessment')
             
         Returns:
             Dictionary containing the response and metadata
@@ -90,7 +92,8 @@ class QueryHandler:
             response = await self._generate_llm_response(
                 query, 
                 context_chunks, 
-                conversation_history
+                conversation_history,
+                mode
             )
             
             # Store response in conversation history
@@ -148,7 +151,8 @@ class QueryHandler:
         self, 
         query: str, 
         context_chunks: List[Dict], 
-        conversation_history: List[Dict] = None
+        conversation_history: List[Dict] = None,
+        mode: str = "exploration"
     ) -> str:
         """
         Generate response using hybrid LLM service.
@@ -157,6 +161,7 @@ class QueryHandler:
             query: User's question
             context_chunks: Relevant context from vector database
             conversation_history: Previous conversation context
+            mode: Learning mode ('exploration' or 'assessment')
             
         Returns:
             Generated response text
@@ -172,7 +177,8 @@ class QueryHandler:
             prompt = self.prompt_templates.create_tutor_prompt(
                 query=query,
                 context=context_text,
-                conversation_history=history_text
+                conversation_history=history_text,
+                mode=mode
             )
             
             # Prepare messages for LLM
@@ -298,7 +304,8 @@ class QueryHandler:
         query: str, 
         user_id: str = None, 
         websocket = None,
-        manager = None
+        manager = None,
+        mode: str = "exploration"
     ) -> None:
         """
         Process a user query and stream the response via WebSocket.
@@ -308,6 +315,7 @@ class QueryHandler:
             user_id: Unique identifier for the user
             websocket: WebSocket connection for streaming
             manager: Connection manager for sending messages
+            mode: Learning mode ('exploration' or 'assessment')
         """
         try:
             # Ensure LLM service is initialized
@@ -340,7 +348,8 @@ class QueryHandler:
                 query, 
                 context_chunks, 
                 websocket,
-                manager
+                manager,
+                mode
             )
             
         except Exception as e:
@@ -359,7 +368,8 @@ class QueryHandler:
         query: str, 
         context_chunks: List[Dict], 
         websocket = None,
-        manager = None
+        manager = None,
+        mode: str = "exploration"
     ) -> None:
         """
         Generate streaming response using hybrid LLM service.
@@ -369,6 +379,7 @@ class QueryHandler:
             context_chunks: Relevant context from vector database
             websocket: WebSocket connection for streaming
             manager: Connection manager for sending messages
+            mode: Learning mode ('exploration' or 'assessment')
         """
         try:
             # Build context from chunks
@@ -378,7 +389,8 @@ class QueryHandler:
             prompt = self.prompt_templates.create_tutor_prompt(
                 query=query,
                 context=context_text,
-                conversation_history=""
+                conversation_history="",
+                mode=mode
             )
             
             # Prepare messages for LLM
@@ -400,21 +412,27 @@ class QueryHandler:
             # Use hybrid LLM service for streaming
             full_response = ""
             
+            # Debug: Log the prompt being sent to LLM (but don't stream it)
+            logger.info(f"Sending prompt to LLM (length: {len(prompt)})")
+            logger.debug(f"Prompt content: {prompt[:200]}...")
+            
             async for chunk in self.llm_service.generate_streaming_response(
                 messages=messages,
                 query=query,
                 max_tokens=1000,
                 temperature=0.7
             ):
-                full_response += chunk
-                
-                # Send chunk to client
-                chunk_msg = {
-                    "type": "chunk",
-                    "content": chunk,
-                    "timestamp": datetime.now().isoformat()
-                }
-                await manager.send_personal_message(json.dumps(chunk_msg), websocket)
+                # Only stream the actual LLM response chunks, not the prompt
+                if chunk and chunk.strip():  # Ensure chunk is not empty
+                    full_response += chunk
+                    
+                    # Send chunk to client
+                    chunk_msg = {
+                        "type": "chunk",
+                        "content": chunk,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    await manager.send_personal_message(json.dumps(chunk_msg), websocket)
             
             # Send completion message
             complete_msg = {
@@ -426,6 +444,10 @@ class QueryHandler:
             
             # Store response in conversation history
             self._add_to_history(full_response, 'assistant', None)
+            
+            # Debug: Log the final response
+            logger.info(f"Streamed response complete (length: {len(full_response)})")
+            logger.debug(f"Final response: {full_response[:200]}...")
             
         except Exception as e:
             logger.error(f"Failed to generate streaming response: {e}")

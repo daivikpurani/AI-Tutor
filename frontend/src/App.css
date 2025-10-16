@@ -649,6 +649,37 @@ body {
   transition: var(--transition-medium);
 }
 
+/* Mode toggle inside input */
+.mode-toggle {
+  display: flex;
+  background: var(--bg-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.mode-chip {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.mode-chip.active {
+  background: linear-gradient(135deg, rgba(32, 217, 210, 0.15), rgba(59, 130, 246, 0.15));
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px rgba(32, 217, 210, 0.15);
+}
+
+.mode-chip:hover {
+  color: var(--text-primary);
+}
+
 .input-container:focus-within {
   background: var(--bg-card);
   transform: translateY(-1px);

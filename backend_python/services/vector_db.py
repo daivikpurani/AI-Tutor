@@ -277,11 +277,13 @@ class VectorDatabase:
                     filename = metadata.get('filename', 'unknown')
                     if filename not in documents:
                         documents[filename] = {
+                            'id': metadata.get('document_id', filename),
                             'filename': filename,
                             'file_type': metadata.get('file_type', 'unknown'),
                             'chunk_count': 1,
                             'total_size': metadata.get('chunk_size', metadata.get('content_length', 0)),
                             'upload_date': metadata.get('upload_date', 'unknown'),
+                            'description': metadata.get('description', ''),
                             'is_chunked': metadata.get('is_chunked', True)
                         }
                     else:

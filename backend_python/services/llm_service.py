@@ -162,6 +162,11 @@ class OpenAIProvider(BaseLLMProvider):
         model = model or self.default_model
         
         try:
+            # Debug: Log what we're sending to OpenAI
+            user_message = messages[-1]['content'] if messages else ""
+            logger.info(f"OpenAI streaming request - Model: {model}, User message length: {len(user_message)}")
+            logger.debug(f"OpenAI user message: {user_message[:200]}...")
+            
             stream = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -171,9 +176,16 @@ class OpenAIProvider(BaseLLMProvider):
                 **kwargs
             )
             
+            chunk_count = 0
             async for chunk in stream:
                 if chunk.choices[0].delta.content is not None:
-                    yield chunk.choices[0].delta.content
+                    content = chunk.choices[0].delta.content
+                    if content and content.strip():  # Only yield non-empty content
+                        chunk_count += 1
+                        logger.debug(f"OpenAI chunk {chunk_count}: {content[:50]}...")
+                        yield content
+            
+            logger.info(f"OpenAI streaming complete - {chunk_count} chunks yielded")
                     
         except Exception as e:
             logger.error(f"OpenAI streaming API error: {e}")
@@ -261,6 +273,10 @@ class OllamaProvider(BaseLLMProvider):
             # Convert messages to Ollama format
             prompt = self._convert_messages_to_prompt(messages)
             
+            # Debug: Log what we're sending to Ollama
+            logger.info(f"Ollama streaming request - Model: {model}, Prompt length: {len(prompt)}")
+            logger.debug(f"Ollama prompt: {prompt[:200]}...")
+            
             stream = ollama.chat(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
@@ -271,9 +287,16 @@ class OllamaProvider(BaseLLMProvider):
                 stream=True
             )
             
+            chunk_count = 0
             for chunk in stream:
                 if 'message' in chunk and 'content' in chunk['message']:
-                    yield chunk['message']['content']
+                    content = chunk['message']['content']
+                    if content and content.strip():  # Only yield non-empty content
+                        chunk_count += 1
+                        logger.debug(f"Ollama chunk {chunk_count}: {content[:50]}...")
+                        yield content
+            
+            logger.info(f"Ollama streaming complete - {chunk_count} chunks yielded")
                     
         except Exception as e:
             logger.error(f"Ollama streaming API error: {e}")
@@ -294,7 +317,8 @@ class OllamaProvider(BaseLLMProvider):
             elif role == 'assistant':
                 prompt_parts.append(f"Assistant: {content}")
         
-        return "\n\n".join(prompt_parts) + "\n\nAssistant:"
+        # Return the prompt without the "Assistant:" suffix to avoid confusion
+        return "\n\n".join(prompt_parts)
 
 class MockProvider(BaseLLMProvider):
     """Mock provider for testing and fallback."""
@@ -319,10 +343,22 @@ class MockProvider(BaseLLMProvider):
         """Generate mock response."""
         user_message = messages[-1]['content'] if messages else "Hello"
         
+        # Extract the actual question from the user message
+        # The user message contains the full prompt, we need to extract just the question
+        question = user_message
+        if "Student's question:" in user_message:
+            # Extract just the question part
+            start_idx = user_message.find("Student's question:") + len("Student's question:")
+            end_idx = user_message.find("\n**")
+            if end_idx == -1:
+                end_idx = len(user_message)
+            question = user_message[start_idx:end_idx].strip()
+        
+        # Generate a proper mock response about the question
         mock_responses = [
-            f"I understand you're asking about: {user_message}. This is a mock response from the local system.",
-            f"Based on your question '{user_message}', here's a helpful response generated locally.",
-            f"Thank you for your question about {user_message}. I'm processing this with our local AI system."
+            f"I'd be happy to help explain {question}. This is a mock response from our local AI system. In a real implementation, this would provide detailed information about the topic.",
+            f"Great question about {question}! This is a simulated response. The actual AI would provide comprehensive information about this topic.",
+            f"Let me help you understand {question}. This is a mock response, but in production, you'd get detailed explanations and examples."
         ]
         
         import random
@@ -442,9 +478,9 @@ class HybridLLMService:
         self.providers = {}
         self.complexity_analyzer = QueryComplexityAnalyzer()
         self.routing_strategy = {
-            QueryComplexity.SIMPLE: [LLMProvider.OLLAMA, LLMProvider.MOCK],
-            QueryComplexity.COMPLEX: [LLMProvider.OPENAI, LLMProvider.OLLAMA],
-            QueryComplexity.UNKNOWN: [LLMProvider.OLLAMA, LLMProvider.OPENAI, LLMProvider.MOCK]
+            QueryComplexity.SIMPLE: [LLMProvider.OPENAI, LLMProvider.OLLAMA, LLMProvider.MOCK],
+            QueryComplexity.COMPLEX: [LLMProvider.OPENAI, LLMProvider.OLLAMA, LLMProvider.MOCK],
+            QueryComplexity.UNKNOWN: [LLMProvider.OPENAI, LLMProvider.OLLAMA, LLMProvider.MOCK]
         }
     
     async def initialize(self) -> bool:
@@ -472,6 +508,10 @@ class HybridLLMService:
         preferred_providers = self.routing_strategy.get(complexity, [LLMProvider.MOCK])
         
         logger.info(f"Query complexity: {complexity.value}, routing to: {[p.value for p in preferred_providers]}")
+        
+        # Log provider availability
+        for provider_type, provider in self.providers.items():
+            logger.info(f"Provider {provider_type.value}: available={provider.is_available}")
         
         # Find first available provider in preference order
         for provider_type in preferred_providers:

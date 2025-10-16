@@ -15,6 +15,7 @@ class ChatRequest(BaseModel):
         None, 
         description="Previous conversation context"
     )
+    mode: Optional[str] = Field("exploration", description="Learning mode: 'exploration' or 'assessment'")
 
 class ChatResponse(BaseModel):
     """Response model for chat endpoint."""

@@ -76,9 +76,18 @@ function Docs() {
     });
   };
 
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
   const filteredDocuments = documents.filter(doc => {
+    const description = doc.description || 'No description available';
     const matchesSearch = doc.filename.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         doc.description.toLowerCase().includes(searchTerm.toLowerCase());
+                         description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = filterType === 'all' || doc.file_type === filterType;
     return matchesSearch && matchesFilter;
   });
@@ -142,7 +151,85 @@ function Docs() {
         </div>
       </div>
 
-      <div className="docs-content">
+      <div className="docs-main">
+        <aside className="docs-sidebar">
+          <div className="sidebar-section">
+            <div className="sidebar-title">Document Categories</div>
+            <div className="sidebar-item active">
+              <span className="sidebar-icon">📄</span>
+              <span>All Documents</span>
+            </div>
+            <div className="sidebar-item">
+              <span className="sidebar-icon">📚</span>
+              <span>Textbooks</span>
+            </div>
+            <div className="sidebar-item">
+              <span className="sidebar-icon">📝</span>
+              <span>Notes & Guides</span>
+            </div>
+            <div className="sidebar-item">
+              <span className="sidebar-icon">📊</span>
+              <span>Presentations</span>
+            </div>
+            <div className="sidebar-item">
+              <span className="sidebar-icon">📈</span>
+              <span>Data & Reports</span>
+            </div>
+          </div>
+          
+          <div className="sidebar-section">
+            <div className="sidebar-title">Quick Actions</div>
+            <div className="sidebar-item">
+              <span className="sidebar-icon">🔍</span>
+              <span>Search Documents</span>
+            </div>
+            <div className="sidebar-item">
+              <span className="sidebar-icon">📤</span>
+              <span>Upload New</span>
+            </div>
+            <div className="sidebar-item">
+              <span className="sidebar-icon">📋</span>
+              <span>Export List</span>
+            </div>
+            <div className="sidebar-item">
+              <span className="sidebar-icon">🗂️</span>
+              <span>Organize</span>
+            </div>
+          </div>
+          
+          <div className="sidebar-section">
+            <div className="sidebar-title">Document Stats</div>
+            <div className="sidebar-stats">
+              <div className="stat-row">
+                <span className="stat-label">Total:</span>
+                <span className="stat-value">{documents.length}</span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-label">Chunks:</span>
+                <span className="stat-value">{documents.reduce((sum, doc) => sum + (doc.chunk_count || 0), 0)}</span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-label">Types:</span>
+                <span className="stat-value">{new Set(documents.map(doc => doc.file_type)).size}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="sidebar-section">
+            <div className="sidebar-title">File Types</div>
+            {fileTypes.filter(type => type !== 'all').map(type => (
+              <div key={type} className="sidebar-item">
+                <span className="sidebar-icon">{getFileTypeIcon(type)}</span>
+                <span>{type.toUpperCase()}</span>
+                <span className="file-count">
+                  ({documents.filter(doc => doc.file_type === type).length})
+                </span>
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        <div className="docs-content">
         {/* Search and Filter Controls */}
         <div className="docs-controls">
           <div className="search-container">
@@ -213,20 +300,20 @@ function Docs() {
                     <h3 className="document-title">{doc.filename}</h3>
                     <div className="document-meta">
                       <span className="file-type">{doc.file_type.toUpperCase()}</span>
-                      <span className="file-size">{doc.file_size}</span>
+                      <span className="file-size">{formatFileSize(doc.total_size)}</span>
                       <span className="upload-date">{formatDate(doc.upload_date)}</span>
                     </div>
                   </div>
                 </div>
                 
                 <div className="document-content">
-                  <p className="document-description">{doc.description}</p>
+                  <p className="document-description">{doc.description || 'No description available'}</p>
                   
                   <div className="document-stats">
                     <div className="stat-item">
                       <span className="stat-icon">📄</span>
                       <span className="stat-label">Chunks:</span>
-                      <span className="stat-value">{doc.chunks_count}</span>
+                      <span className="stat-value">{doc.chunk_count || 0}</span>
                     </div>
                     <div className="stat-item">
                       <span className="stat-icon">🔍</span>
@@ -273,38 +360,6 @@ function Docs() {
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="docs-footer">
-        <div className="docs-summary">
-          <h3>Course Materials Summary</h3>
-          <div className="summary-stats">
-            <div className="summary-item">
-              <span className="summary-number">{documents.length}</span>
-              <span className="summary-label">Total Documents</span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-number">
-                {documents.reduce((sum, doc) => sum + doc.chunks_count, 0)}
-              </span>
-              <span className="summary-label">Total Chunks</span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-number">
-                {new Set(documents.map(doc => doc.file_type)).size}
-              </span>
-              <span className="summary-label">File Types</span>
-            </div>
-          </div>
-        </div>
-        
-        <div className="docs-info">
-          <h3>About Course Materials</h3>
-          <p>
-            These are the educational documents that have been uploaded to the AI-Tutor system. 
-            The AI can reference and answer questions based on the content of these materials. 
-            Each document is processed and chunked for efficient search and retrieval.
-          </p>
         </div>
       </div>
     </div>

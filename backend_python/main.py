@@ -93,7 +93,8 @@ async def chat_endpoint(request: ChatRequest):
         result = await query_handler.process_query(
             query=request.message,
             user_id=request.user_id,
-            conversation_history=request.conversation_history
+            conversation_history=request.conversation_history,
+            mode=request.mode
         )
         
         return ChatResponse(
@@ -354,7 +355,8 @@ async def test_query_endpoint(request: ChatRequest):
         result = await query_handler.process_query(
             query=request.message,
             user_id=request.user_id or "test-user",
-            conversation_history=request.conversation_history
+            conversation_history=request.conversation_history,
+            mode=request.mode
         )
         
         return {
@@ -441,7 +443,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 query=message_data["message"],
                 user_id=message_data.get("user_id", "websocket_user"),
                 websocket=websocket,
-                manager=manager
+                manager=manager,
+                mode=message_data.get("mode", "exploration")
             )
             
     except WebSocketDisconnect:
