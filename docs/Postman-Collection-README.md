@@ -1,12 +1,12 @@
 # Ai-Tutor Postman Collection
 
-This directory contains Postman collection and environment files for testing the Ai-Tutor FastAPI backend.
+The Postman collection and environment files for testing the Ai-Tutor FastAPI backend are located in the `postman/` directory.
 
 ## Files Included
 
-- `Ai-Tutor-Postman-Collection.json` - Complete API collection
-- `Ai-Tutor-Postman-Environment.json` - Environment variables
-- `WebSocket-Testing-Guide.md` - WebSocket testing instructions
+- `postman/Ai-Tutor-Postman-Collection.json` - Complete API collection
+- `postman/Ai-Tutor-Postman-Environment.json` - Environment variables
+- `docs/WebSocket-Testing-Guide.md` - WebSocket testing instructions
 
 ## Quick Setup
 
@@ -14,9 +14,9 @@ This directory contains Postman collection and environment files for testing the
 
 1. Open Postman
 2. Click **Import** button
-3. Select both JSON files:
-   - `Ai-Tutor-Postman-Collection.json`
-   - `Ai-Tutor-Postman-Environment.json`
+3. Select both JSON files from the `postman/` directory:
+   - `postman/Ai-Tutor-Postman-Collection.json`
+   - `postman/Ai-Tutor-Postman-Environment.json`
 4. Select the **Ai-Tutor Development Environment** from the environment dropdown
 
 ### 2. Configure Environment Variables
@@ -95,7 +95,7 @@ The backend should be accessible at `http://localhost:8000`
 
 ## WebSocket Testing
 
-Since Postman has limited WebSocket support, use the methods described in `WebSocket-Testing-Guide.md`:
+Since Postman has limited WebSocket support, use the methods described in `docs/WebSocket-Testing-Guide.md`:
 
 - Browser console testing
 - Command line with `wscat`

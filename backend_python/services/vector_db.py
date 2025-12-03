@@ -53,9 +53,13 @@ class VectorDatabase:
             # Ensure directory exists
             os.makedirs(self.persist_directory, exist_ok=True)
             
-            self.client = chromadb.PersistentClient(
-                path=self.persist_directory
+            # ChromaDB 0.3.23 uses Client() with Settings, not PersistentClient
+            settings = Settings(
+                persist_directory=self.persist_directory,
+                chroma_db_impl="duckdb",
+                chroma_api_impl="local"
             )
+            self.client = chromadb.Client(settings=settings)
             logger.info(f"ChromaDB client initialized with persistence at: {self.persist_directory}")
         except Exception as e:
             logger.error(f"Failed to initialize ChromaDB client: {e}")
@@ -71,16 +75,38 @@ class VectorDatabase:
             logger.error(f"Failed to initialize embedding model: {e}")
             raise
     
+    def _get_embedding_function(self):
+        """Create an embedding function for ChromaDB."""
+        def embed_function(texts):
+            """Embed texts using the SentenceTransformer model."""
+            if not texts:
+                return []
+            # Handle both single strings and lists
+            if isinstance(texts, str):
+                texts = [texts]
+            # Generate embeddings
+            embeddings = self.embedding_model.encode(texts, convert_to_tensor=False)
+            return embeddings.tolist() if hasattr(embeddings, 'tolist') else embeddings
+        
+        return embed_function
+    
     def _initialize_collection(self):
         """Initialize or get the document collection."""
         try:
+            # Create embedding function for ChromaDB
+            embedding_function = self._get_embedding_function()
+            
             # Use configured collection name
             try:
-                self.collection = self.client.get_collection(name=self.collection_name)
+                self.collection = self.client.get_collection(
+                    name=self.collection_name,
+                    embedding_function=embedding_function
+                )
                 logger.info(f"Connected to existing '{self.collection_name}' collection")
             except:
                 self.collection = self.client.get_or_create_collection(
                     name=self.collection_name,
+                    embedding_function=embedding_function,
                     metadata={"description": "AI Tutor documents", "created_at": datetime.now().isoformat()}
                 )
                 logger.info(f"Created new '{self.collection_name}' collection")
@@ -189,7 +215,8 @@ class VectorDatabase:
             logger.error(f"Failed to add document directly: {e}")
             return False
     
-    async def search_similar(self, query: str, n_results: int = 5, filter_metadata: Dict = None) -> List[Dict[str, Any]]:
+    async def search_similar(self, query: str, n_results: int = 5, filter_metadata: Dict = None,
+                             use_mmr: bool = True, mmr_lambda: float = 0.5) -> List[Dict[str, Any]]:
         """
         Search for similar documents using semantic similarity.
         
@@ -219,8 +246,19 @@ class VectorDatabase:
                         'distance': results['distances'][0][i] if results['distances'] else 0,
                         'id': results['ids'][0][i] if results['ids'] else None
                     }
+                    # Add a short preview to reduce context size upstream
+                    preview = (doc or "").strip()
+                    chunk_data['preview'] = (preview[:300] + ("..." if len(preview) > 300 else ""))
                     similar_chunks.append(chunk_data)
             
+            # Apply simple MMR for diversity if requested and we have more than 2 candidates
+            if use_mmr and len(similar_chunks) > 2:
+                try:
+                    selected = self._mmr_select(query, similar_chunks, top_k=min(len(similar_chunks), n_results), lambda_mult=mmr_lambda)
+                    similar_chunks = selected
+                except Exception as e:
+                    logger.debug(f"MMR selection failed, using original order: {e}")
+
             logger.info(f"Found {len(similar_chunks)} similar chunks for query: {query[:50]}...")
             return similar_chunks
             
@@ -380,6 +418,43 @@ class VectorDatabase:
                 return f"{total_size:.1f} {unit}"
             total_size /= 1024.0
         return f"{total_size:.1f} TB"
+
+    def _mmr_select(self, query: str, candidates: List[Dict[str, Any]], top_k: int, lambda_mult: float = 0.5) -> List[Dict[str, Any]]:
+        """Maximal Marginal Relevance selection using embedding_model."""
+        # Compute embeddings
+        query_emb = self.embedding_model.encode([query], convert_to_tensor=False)[0]
+        doc_embs = self.embedding_model.encode([c.get('text', '') for c in candidates], convert_to_tensor=False)
+        import numpy as np
+
+        def cosine_sim(a, b):
+            a = np.array(a)
+            b = np.array(b)
+            denom = (np.linalg.norm(a) * np.linalg.norm(b)) or 1.0
+            return float(np.dot(a, b) / denom)
+
+        selected_indices = []
+        candidate_indices = list(range(len(candidates)))
+
+        # Precompute relevance to query
+        relevance = [cosine_sim(query_emb, emb) for emb in doc_embs]
+
+        while len(selected_indices) < top_k and candidate_indices:
+            mmr_scores = []
+            for idx in candidate_indices:
+                if not selected_indices:
+                    diversity_penalty = 0.0
+                else:
+                    diversity_penalty = max(
+                        cosine_sim(doc_embs[idx], doc_embs[j]) for j in selected_indices
+                    )
+                score = lambda_mult * relevance[idx] - (1 - lambda_mult) * diversity_penalty
+                mmr_scores.append((score, idx))
+            mmr_scores.sort(reverse=True)
+            best_idx = mmr_scores[0][1]
+            selected_indices.append(best_idx)
+            candidate_indices.remove(best_idx)
+
+        return [candidates[i] for i in selected_indices]
     
     async def backup_database(self, backup_path: str) -> bool:
         """Create a backup of the ChromaDB database."""

@@ -221,6 +221,15 @@ embeddings/
 *.sqlite
 *.sqlite3
 
+# ChromaDB directories (vector database storage)
+chroma_db/
+**/chroma_db/
+
 # Backup files
 *.bak
 *.backup
+
+# Course materials (keep folder structure but ignore contents)
+course_materials/*
+!course_materials/.gitkeep
+!course_materials/**/.gitkeep

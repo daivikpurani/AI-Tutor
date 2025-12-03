@@ -2,6 +2,8 @@
 
 A research-oriented chatbot-based learning assistant system designed to enhance educational experiences through contextual AI tutoring, automated assessment, and comprehensive learning analytics.
 
+> Note: This project now uses a FastAPI backend (`backend_python`) and a Vite React frontend (`frontend`). The chat UI supports rich content: Markdown (GFM), syntax-highlighted code blocks, KaTeX math, collapsible TL;DR sections, citations under answers, and message actions (copy/retry) with avatars and typing indicators.
+
 ## 1. Project Overview
 
 Ai-Tutor is an intelligent tutoring system that leverages conversational AI to provide personalized learning experiences grounded in course-specific content. The system enables instructors to upload educational materials (modules, documents, resources) which are then processed and made available to students through an interactive chatbot interface.
@@ -53,12 +55,61 @@ Ai-Tutor/
 │   ├── query_handler.py     # LLM query processing
 │   └── requirements.txt     # Python dependencies
 ├── package.json             # Root package.json with unified scripts
+├── course_materials/        # Course materials directory (papers, lectures, textbooks, notes)
+│   ├── papers/             # Research papers and academic articles
+│   ├── lectures/           # Lecture slides and notes
+│   ├── textbooks/          # Textbook chapters and materials
+│   └── notes/              # Additional course notes
 ├── env.example              # Environment variables template
 ├── .gitignore              # Git ignore rules
 └── README.md               # This file
 ```
 
-## 4. Setup Instructions
+## 4. Course Materials
+
+The RAG system grounds its answers in course materials stored in the `course_materials/` directory. This folder is organized into subdirectories for different types of materials:
+
+- **`papers/`**: Research papers and academic articles
+- **`lectures/`**: Lecture slides and notes
+- **`textbooks/`**: Textbook chapters and materials
+- **`notes/`**: Additional course notes and supplementary materials
+
+### Adding Course Materials
+
+1. **Place files in the appropriate subdirectory**:
+   ```bash
+   # Example: Add a PDF paper
+   cp your_paper.pdf course_materials/papers/
+   
+   # Example: Add lecture slides
+   cp lecture_01.pdf course_materials/lectures/
+   ```
+
+2. **Load materials into the vector database**:
+   ```bash
+   python scripts/load_course_materials.py
+   ```
+
+   This script will:
+   - Recursively scan the `course_materials/` directory
+   - Process all supported file formats (PDF, TXT, MD, DOCX, DOC)
+   - Chunk documents appropriately
+   - Add them to the ChromaDB vector database for RAG retrieval
+
+### Supported File Formats
+
+- PDF (`.pdf`)
+- Text files (`.txt`)
+- Markdown (`.md`)
+- Word documents (`.docx`, `.doc`)
+
+### Notes
+
+- Course materials are excluded from git by default (see `.gitignore`)
+- The folder structure is preserved via `.gitkeep` files
+- Materials can also be uploaded via the API endpoints (`/api/upload`, `/api/upload-direct`, `/api/upload-text`)
+
+## 5. Setup Instructions
 
 ### Prerequisites
 
@@ -120,6 +171,13 @@ REACT_APP_API_URL=http://localhost:8000
    ```bash
    cp env.example .env
    # Edit .env with your actual API keys
+   ```
+
+4. **Add course materials (optional but recommended)**
+   ```bash
+   # Place your course materials in the course_materials/ directory
+   # Then load them into the vector database:
+   python scripts/load_course_materials.py
    ```
 
 ### Development Entry Points
@@ -218,7 +276,12 @@ npm run python:test
 
 ### Current Documentation
 - **README.md**: This comprehensive project overview
-- **DEVELOPER.md**: Detailed developer documentation with technical specifications
+- **docs/DEVELOPER.md**: Detailed developer documentation with technical specifications
+- **docs/STARTUP-GUIDE.md**: Setup and startup instructions
+- **docs/MIGRATION_GUIDE.md**: Migration guide for Node.js to FastAPI
+- **docs/ARCHITECTURE_DIAGRAMS.md**: System architecture diagrams
+- **docs/WebSocket-Testing-Guide.md**: WebSocket testing guide
+- **docs/Postman-Collection-README.md**: Postman API collection documentation
 - **Inline Comments**: Code documentation within source files
 
 ### Planned Documentation
@@ -298,6 +361,6 @@ npm run fresh-install    # Clean and reinstall everything
    - Start chatting with the AI tutor
    - Upload course materials through the backend API
 
-For detailed technical information, API documentation, and troubleshooting, see [DEVELOPER.md](./DEVELOPER.md).
+For detailed technical information, API documentation, and troubleshooting, see [docs/DEVELOPER.md](./docs/DEVELOPER.md).
 
 For additional support or questions, please contact the development team or refer to the internal documentation repository.

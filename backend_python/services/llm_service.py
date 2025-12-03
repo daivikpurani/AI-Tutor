@@ -15,7 +15,17 @@ from openai import AsyncOpenAI
 import ollama
 import httpx
 
+# Try to import tiktoken for token counting (optional)
+try:
+    import tiktoken
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
+
+if not TIKTOKEN_AVAILABLE:
+    logger.warning("tiktoken not available, token counting for Ollama will be approximate")
 
 class LLMProvider(Enum):
     """Supported LLM providers."""
@@ -94,6 +104,9 @@ class OpenAIProvider(BaseLLMProvider):
                 return False
             
             self.client = AsyncOpenAI(api_key=api_key)
+            # Align default model with configuration
+            if getattr(settings, 'openai_model', None):
+                self.default_model = settings.openai_model
             
             # Test the connection
             try:
@@ -202,6 +215,15 @@ class OllamaProvider(BaseLLMProvider):
     async def initialize(self) -> bool:
         """Initialize Ollama client."""
         try:
+            # Sync defaults from settings if available
+            try:
+                from utils.config import settings
+                if getattr(settings, 'ollama_base_url', None):
+                    self.base_url = settings.ollama_base_url
+                if getattr(settings, 'ollama_default_model', None):
+                    self.default_model = settings.ollama_default_model
+            except Exception:
+                pass
             # Test connection to Ollama server
             async with httpx.AsyncClient() as client:
                 response = await client.get(f"{self.base_url}/api/tags", timeout=5.0)
@@ -216,6 +238,19 @@ class OllamaProvider(BaseLLMProvider):
         except Exception as e:
             logger.warning(f"Ollama provider not available: {e}")
             return False
+    
+    def _estimate_tokens(self, text: str) -> int:
+        """Estimate token count for text using tiktoken or approximation."""
+        if TIKTOKEN_AVAILABLE:
+            try:
+                # Use cl100k_base encoding (used by GPT-3.5/GPT-4)
+                encoding = tiktoken.get_encoding("cl100k_base")
+                return len(encoding.encode(text))
+            except Exception as e:
+                logger.warning(f"Token counting failed: {e}, using approximation")
+        
+        # Fallback: approximate tokens (1 token ≈ 4 characters)
+        return len(text) // 4
     
     async def generate_response(
         self, 
@@ -244,11 +279,22 @@ class OllamaProvider(BaseLLMProvider):
                 }
             )
             
+            response_content = response['message']['content']
+            
+            # Estimate token usage
+            prompt_tokens = self._estimate_tokens(prompt)
+            completion_tokens = self._estimate_tokens(response_content)
+            total_tokens = prompt_tokens + completion_tokens
+            
             return LLMResponse(
-                content=response['message']['content'],
+                content=response_content,
                 provider=self.provider,
                 model=model,
-                usage={}  # Ollama doesn't provide usage stats
+                usage={
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens
+                }
             )
             
         except Exception as e:
@@ -347,12 +393,33 @@ class MockProvider(BaseLLMProvider):
         # The user message contains the full prompt, we need to extract just the question
         question = user_message
         if "Student's question:" in user_message:
-            # Extract just the question part
-            start_idx = user_message.find("Student's question:") + len("Student's question:")
-            end_idx = user_message.find("\n**")
-            if end_idx == -1:
-                end_idx = len(user_message)
-            question = user_message[start_idx:end_idx].strip()
+            # Extract just the question part (stop before prompt instructions)
+            question_section = user_message.split("Student's question:", 1)[1]
+            question_section = question_section.strip()
+            # Stop at the first known delimiter that indicates extra metadata/instructions
+            delimiters = [
+                "\nPrevious conversation",
+                "\n[RETRIEVAL",
+                "\nRelevant context",
+                "\n[EXAMPLES",
+                "\n[CHAIN-OF-THOUGHT",
+                "\n[EXPLORATION MODE",
+                "\n[ASSESSMENT MODE",
+                "\n[FINAL REMINDERS]",
+                "\n⚠️",
+                "\n\n"
+            ]
+            for delimiter in delimiters:
+                idx = question_section.find(delimiter)
+                if idx != -1:
+                    question_section = question_section[:idx]
+                    break
+            # Use first line if multiple remain
+            question_lines = [line.strip() for line in question_section.splitlines() if line.strip()]
+            if question_lines:
+                question = question_lines[0]
+            else:
+                question = question_section.strip()
         
         # Generate a proper mock response about the question
         mock_responses = [
@@ -478,9 +545,10 @@ class HybridLLMService:
         self.providers = {}
         self.complexity_analyzer = QueryComplexityAnalyzer()
         self.routing_strategy = {
-            QueryComplexity.SIMPLE: [LLMProvider.OPENAI, LLMProvider.OLLAMA, LLMProvider.MOCK],
-            QueryComplexity.COMPLEX: [LLMProvider.OPENAI, LLMProvider.OLLAMA, LLMProvider.MOCK],
-            QueryComplexity.UNKNOWN: [LLMProvider.OPENAI, LLMProvider.OLLAMA, LLMProvider.MOCK]
+            # Default preference is local first for cost/token balance, escalate as needed
+            QueryComplexity.SIMPLE: [LLMProvider.OLLAMA, LLMProvider.OPENAI, LLMProvider.MOCK],
+            QueryComplexity.COMPLEX: [LLMProvider.OLLAMA, LLMProvider.OPENAI, LLMProvider.MOCK],
+            QueryComplexity.UNKNOWN: [LLMProvider.OLLAMA, LLMProvider.OPENAI, LLMProvider.MOCK]
         }
     
     async def initialize(self) -> bool:
@@ -523,6 +591,97 @@ class HybridLLMService:
         # Fallback to mock provider
         logger.warning("No preferred providers available, using mock provider")
         return self.providers[LLMProvider.MOCK]
+
+    async def _self_check(self, draft_answer: str, mode: str) -> Dict[str, Any]:
+        """Run a lightweight self-check to estimate confidence and detect issues."""
+        from utils.prompts import PromptTemplates
+        from utils.config import settings
+        messages: List[Dict[str, str]] = []
+        if mode == "assessment":
+            system_text = PromptTemplates.SELF_CHECK_ASSESSMENT
+        else:
+            system_text = PromptTemplates.SELF_CHECK_EXPLORATION
+        messages.append({"role": "system", "content": system_text})
+        messages.append({
+            "role": "user",
+            "content": f"Answer to validate:\n{draft_answer}\nReturn ONLY the JSON."
+        })
+
+        # Prefer OpenAI mini for reliable JSON; fallback to Ollama
+        provider: Optional[BaseLLMProvider] = None
+        if self.providers.get(LLMProvider.OPENAI) and self.providers[LLMProvider.OPENAI].is_available:
+            provider = self.providers[LLMProvider.OPENAI]
+            model = getattr(settings, 'openai_model', None) or None
+        else:
+            provider = self.providers.get(LLMProvider.OLLAMA)
+            model = getattr(settings, 'ollama_default_model', None) or None
+
+        if not provider:
+            return {"confidence": 0.0, "issues": ["no_provider"], "missing_citations": True}
+
+        try:
+            resp = await provider.generate_response(messages=messages, model=model, max_tokens=200, temperature=0)
+            raw = resp.content or "{}"
+            # Attempt to locate JSON in text
+            start = raw.find('{')
+            end = raw.rfind('}')
+            if start != -1 and end != -1 and end > start:
+                raw = raw[start:end+1]
+            data = json.loads(raw)
+            return data
+        except Exception as e:
+            logger.warning(f"Self-check parsing failed: {e}")
+            # Conservative low confidence on parse failure
+            if mode == "assessment":
+                return {"confidence": 0.0, "issues": ["parse_error"], "missing_citations": True}
+            return {"confidence": 0.3, "notes": ["parse_error"]}
+    
+    async def generate_response_with_provider(
+        self,
+        messages: List[Dict[str, str]],
+        provider: LLMProvider,
+        model: str = None,
+        max_tokens: int = 1000,
+        temperature: float = 0.7,
+        **kwargs
+    ) -> LLMResponse:
+        """
+        Generate response using a specific provider and model (for benchmarking).
+        Bypasses hybrid routing logic.
+        
+        Args:
+            messages: List of message dictionaries
+            provider: Specific provider to use
+            model: Specific model name (optional, uses default if not provided)
+            max_tokens: Maximum tokens to generate
+            temperature: Temperature setting
+            **kwargs: Additional arguments
+            
+        Returns:
+            LLMResponse from the specified provider
+        """
+        provider_instance = self.providers.get(provider)
+        if not provider_instance:
+            raise ValueError(f"Provider {provider.value} not initialized")
+        
+        if not provider_instance.is_available:
+            raise RuntimeError(f"Provider {provider.value} is not available")
+        
+        # Use default model if not specified
+        if not model:
+            if provider == LLMProvider.OPENAI:
+                from utils.config import settings
+                model = getattr(settings, 'openai_model', 'gpt-4o-mini')
+            elif provider == LLMProvider.OLLAMA:
+                model = provider_instance.default_model
+        
+        return await provider_instance.generate_response(
+            messages=messages,
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            **kwargs
+        )
     
     async def generate_response(
         self, 
@@ -533,51 +692,75 @@ class HybridLLMService:
         temperature: float = 0.7,
         **kwargs
     ) -> LLMResponse:
-        """Generate response using hybrid routing."""
+        """Generate response using hybrid routing with self-check and escalation."""
         if not query and messages:
             query = messages[-1].get('content', '')
-        
-        provider = self.get_provider_for_query(query)
-        
-        try:
-            response = await provider.generate_response(
-                messages=messages,
-                model=model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                **kwargs
-            )
-            
-            # Add routing metadata
-            response.metadata['routing_provider'] = provider.provider.value
-            response.metadata['query_complexity'] = self.complexity_analyzer.analyze_complexity(query).value
-            
-            return response
-            
-        except Exception as e:
-            logger.error(f"Error with provider {provider.provider.value}: {e}")
-            
-            # Try fallback providers
-            for fallback_provider in self.providers.values():
-                if fallback_provider.is_available and fallback_provider != provider:
-                    try:
-                        logger.info(f"Trying fallback provider: {fallback_provider.provider.value}")
-                        response = await fallback_provider.generate_response(
-                            messages=messages,
-                            model=model,
-                            max_tokens=max_tokens,
-                            temperature=temperature,
-                            **kwargs
-                        )
-                        response.metadata['routing_provider'] = fallback_provider.provider.value
-                        response.metadata['fallback_used'] = True
-                        return response
-                    except Exception as fallback_error:
-                        logger.warning(f"Fallback provider {fallback_provider.provider.value} also failed: {fallback_error}")
-                        continue
-            
-            # All providers failed, raise the original error
-            raise
+        mode = kwargs.get('mode', 'exploration')
+        from utils.config import settings
+
+        # Always attempt a local draft first for token/latency balance
+        draft_provider = self.providers.get(LLMProvider.OLLAMA) if self.providers.get(LLMProvider.OLLAMA) and self.providers[LLMProvider.OLLAMA].is_available else None
+        hosted_provider = self.providers.get(LLMProvider.OPENAI) if self.providers.get(LLMProvider.OPENAI) and self.providers[LLMProvider.OPENAI].is_available else None
+
+        # If no local, try hosted directly
+        primary_provider = draft_provider or hosted_provider or self.providers[LLMProvider.MOCK]
+
+        # Adjust generation params by mode
+        if mode == 'assessment':
+            max_tokens = min(max_tokens, getattr(settings, 'assessment_max_gen_tokens', 600))
+            temperature = getattr(settings, 'assessment_temperature', 0.2)
+        else:
+            max_tokens = min(max_tokens, getattr(settings, 'exploration_max_gen_tokens', 400))
+            temperature = getattr(settings, 'exploration_temperature', 0.7)
+
+        # Generate draft
+        draft = await primary_provider.generate_response(
+            messages=messages,
+            model=(getattr(settings, 'ollama_default_model', None) if primary_provider.provider == LLMProvider.OLLAMA else getattr(settings, 'openai_model', None)),
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
+        # Self-check and potential escalation
+        check = await self._self_check(draft.content, mode)
+        assessment_min = getattr(settings, 'assessment_min_conf', 0.72)
+        exploration_min = getattr(settings, 'exploration_min_conf', 0.55)
+        threshold = assessment_min if mode == 'assessment' else exploration_min
+        missing_citations = bool(check.get('missing_citations', False)) if mode == 'assessment' else False
+        confidence = float(check.get('confidence', 0.0)) if isinstance(check.get('confidence', None), (int, float)) else 0.0
+
+        escalated = False
+        final_response = draft
+        if (confidence < threshold) or missing_citations:
+            if hosted_provider:
+                escalated = True
+                try:
+                    final_response = await hosted_provider.generate_response(
+                        messages=messages,
+                        model=getattr(settings, 'openai_model', None),
+                        max_tokens=max_tokens,
+                        temperature=temperature if mode == 'exploration' else 0.3,
+                    )
+                except Exception as e:
+                    logger.warning(f"Escalation to hosted provider failed: {e}")
+                    final_response = draft
+
+        # Attach metadata
+        final_response.metadata['routing_provider'] = final_response.provider.value
+        final_response.metadata['query_complexity'] = self.complexity_analyzer.analyze_complexity(query).value
+        final_response.metadata['confidence'] = confidence
+        final_response.metadata['escalated'] = escalated
+        # Structured log for observability
+        logger.info(json.dumps({
+            "event": "hybrid_decision",
+            "provider": final_response.provider.value,
+            "model": final_response.model,
+            "escalated": escalated,
+            "confidence": confidence,
+            "complexity": final_response.metadata['query_complexity']
+        }))
+
+        return final_response
     
     async def generate_streaming_response(
         self, 

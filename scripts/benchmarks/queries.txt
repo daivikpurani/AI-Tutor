@@ -1,0 +1,25 @@
+# Simple Factual Queries
+What is RAG?
+Explain vector databases in 2 sentences.
+How do embeddings work for document search?
+What is a transformer model?
+Define attention mechanism in one sentence.
+
+# Complex Analytical Queries
+Compare OpenAI and local LLM usage tradeoffs.
+Analyze the benefits and drawbacks of RAG architecture.
+Explain how vector databases improve search relevance compared to traditional keyword search.
+What are the key differences between fine-tuning and RAG for adapting LLMs?
+Compare the computational requirements of different embedding models.
+
+# Domain-Specific Academic Queries
+Explain transformer architecture and its key components.
+What is the attention mechanism and why is it important?
+How does backpropagation work in neural networks?
+Describe the difference between supervised and unsupervised learning.
+What are the main challenges in training large language models?
+
+# Edge Cases
+?
+Explain RAG and vector databases and embeddings and transformers.
+What is the meaning of life?

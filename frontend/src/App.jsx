@@ -1,11 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
-import rehypeRaw from 'rehype-raw';
 import './App.css';
-import 'highlight.js/styles/github.css'; // Code highlighting theme
 import Docs from './Docs';
+import MarkdownRenderer from './components/MarkdownRenderer';
+import ChatBubble from './components/ChatBubble';
+import TypingIndicator from './components/TypingIndicator';
 
 function App() {
   const [messages, setMessages] = useState([
@@ -20,6 +18,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [currentStreamingMessage, setCurrentStreamingMessage] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
   const [demoMode, setDemoMode] = useState(false); // Disable demo mode by default
   const [currentPage, setCurrentPage] = useState('chat'); // Track current page
   const [showSuggestions, setShowSuggestions] = useState(true);
@@ -184,6 +183,7 @@ function App() {
         setConnectionStatus('disconnected');
         setIsLoading(false);
         setCurrentStreamingMessage('');
+        setStatusMessage('');
         // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
           connectWebSocket();
@@ -195,6 +195,7 @@ function App() {
         setConnectionStatus('error');
         setIsLoading(false);
         setCurrentStreamingMessage('');
+        setStatusMessage('');
       };
 
     } catch (error) {
@@ -208,33 +209,41 @@ function App() {
       case 'processing':
         setIsLoading(true);
         setCurrentStreamingMessage('');
+        setStatusMessage('');
         streamBufferRef.current = '';
         break;
       
       case 'context':
-        setCurrentStreamingMessage('🔍 Retrieving relevant information...');
+        setStatusMessage('🔍 Retrieving relevant information...');
+        setCurrentStreamingMessage('');
+        streamBufferRef.current = '';
         break;
       
       case 'context_found':
-        setCurrentStreamingMessage(`📚 Found ${data.message.split(' ')[1]} relevant sections`);
+        setStatusMessage(data.message || '📚 Found relevant sections');
         break;
       
       case 'generating':
-        setCurrentStreamingMessage('🤖 Generating response...');
+        setStatusMessage('🤖 Generating response...');
         break;
       
       case 'chunk':
+        if (statusMessage) {
+          setStatusMessage('');
+        }
         setCurrentStreamingMessage(prev => prev + data.content);
         streamBufferRef.current = streamBufferRef.current + data.content;
         break;
       
       case 'complete':
+        setStatusMessage('');
         // Finalize the streaming message
         const finalMessage = {
           id: Date.now(),
           text: streamBufferRef.current || currentStreamingMessage,
           sender: 'bot',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          tldr: data.tldr || null
         };
         setMessages(prev => [...prev, finalMessage]);
         setCurrentStreamingMessage('');
@@ -243,6 +252,7 @@ function App() {
         break;
       
       case 'error':
+        setStatusMessage('');
         const errorMessage = {
           id: Date.now(),
           text: data.message || "Sorry, I'm having trouble connecting. Please try again.",
@@ -287,6 +297,7 @@ function App() {
         }));
       } else {
         // Fallback to HTTP when WebSocket is not connected
+        // Canonical backend: FastAPI on http://localhost:8000
         const response = await fetch('http://localhost:8000/api/chat', {
           method: 'POST',
           headers: {
@@ -303,7 +314,8 @@ function App() {
           id: Date.now() + 1,
           text: data.response || "I'm processing your question...",
           sender: 'bot',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          tldr: data.tldr || null
         };
         setMessages(prev => [...prev, botMessage]);
         setIsLoading(false);
@@ -328,6 +340,14 @@ function App() {
     const messageToSend = inputMessage;
     setInputMessage('');
     await sendMessage(messageToSend);
+  };
+
+  const handleRetry = async () => {
+    // Retry last user message
+    const lastUser = [...messages].reverse().find(m => (m.sender || m.role) === 'user');
+    if (lastUser && !isLoading) {
+      await sendMessage(lastUser.text || lastUser.content || '');
+    }
   };
 
   const formatTime = (timestamp) => {
@@ -460,83 +480,23 @@ function App() {
         <div className="chat-container">
           <div className="messages-container">
           {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`message ${message.sender === 'user' ? 'user-message' : 'bot-message'}`}
-            >
-              <div className="message-content">
-                <div className="message-text">
-                  {message.sender === 'bot' ? (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[rehypeHighlight, rehypeRaw]}
-                      components={{
-                        code({node, inline, className, children, ...props}) {
-                          const match = /language-(\w+)/.exec(className || '');
-                          return !inline && match ? (
-                            <pre className="code-block">
-                              <code className={className} {...props}>
-                                {children}
-                              </code>
-                            </pre>
-                          ) : (
-                            <code className="inline-code" {...props}>
-                              {children}
-                            </code>
-                          );
-                        },
-                        table({children}) {
-                          return <div className="table-wrapper"><table className="markdown-table">{children}</table></div>;
-                        },
-                        blockquote({children}) {
-                          return <blockquote className="markdown-blockquote">{children}</blockquote>;
-                        }
-                      }}
-                    >
-                      {message.text}
-                    </ReactMarkdown>
-                  ) : (
-                    message.text
-                  )}
-                </div>
-                <div className="message-time">{formatTime(message.timestamp)}</div>
-              </div>
-            </div>
+            <ChatBubble key={message.id} message={message} onRetry={handleRetry} />
           ))}
           
+          {statusMessage && (
+            <div className="status-message">
+              {statusMessage}
+            </div>
+          )}
+
           {/* Streaming message display */}
           {currentStreamingMessage && (
             <div className="message bot-message streaming-message">
               <div className="message-content">
                 <div className="message-text">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[rehypeHighlight, rehypeRaw]}
-                    components={{
-                      code({node, inline, className, children, ...props}) {
-                        const match = /language-(\w+)/.exec(className || '');
-                        return !inline && match ? (
-                          <pre className="code-block">
-                            <code className={className} {...props}>
-                              {children}
-                            </code>
-                          </pre>
-                        ) : (
-                          <code className="inline-code" {...props}>
-                            {children}
-                          </code>
-                        );
-                      },
-                      table({children}) {
-                        return <div className="table-wrapper"><table className="markdown-table">{children}</table></div>;
-                      },
-                      blockquote({children}) {
-                        return <blockquote className="markdown-blockquote">{children}</blockquote>;
-                      }
-                    }}
-                  >
+                  <MarkdownRenderer>
                     {currentStreamingMessage}
-                  </ReactMarkdown>
+                  </MarkdownRenderer>
                   <span className="streaming-cursor">|</span>
                 </div>
               </div>
@@ -547,9 +507,7 @@ function App() {
           {isLoading && !currentStreamingMessage && (
             <div className="message bot-message">
               <div className="message-content">
-                <div className="message-text">
-                  <span className="typing-indicator">AI is thinking...</span>
-                </div>
+                <TypingIndicator />
               </div>
             </div>
           )}

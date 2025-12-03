@@ -25,6 +25,17 @@ class ChatResponse(BaseModel):
     timestamp: str = Field(..., description="Response timestamp")
     context_chunks_used: int = Field(0, description="Number of context chunks used")
     status: str = Field(..., description="Response status")
+    # Optional routing metadata
+    llm_provider: Optional[str] = Field(None, description="Provider used (openai/ollama/mock)")
+    llm_model: Optional[str] = Field(None, description="Model used")
+    confidence: Optional[float] = Field(None, description="Self-check confidence score")
+    escalated: Optional[bool] = Field(None, description="Whether escalation occurred")
+    # Enhanced tutor metadata
+    citations: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description="List of sources used with optional title, url, and score"
+    )
+    tldr: Optional[str] = Field(None, description="Short summary of the answer")
 
 class UploadResponse(BaseModel):
     """Response model for file upload endpoint."""

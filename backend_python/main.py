@@ -15,6 +15,9 @@ import json
 from services.query_handler import QueryHandler
 from services.document_chunker import DocumentChunker
 from services.vector_db import VectorDatabase
+from services.benchmark_config import BenchmarkConfig
+from services.llm_service import HybridLLMService, LLMProvider
+from services.relevance_scorer import RelevanceScorer
 from models.schemas import ChatRequest, ChatResponse, UploadResponse, HealthResponse
 from utils.config import settings
 
@@ -89,25 +92,45 @@ async def health_check():
 async def chat_endpoint(request: ChatRequest):
     """Main chat endpoint for processing user queries."""
     try:
-        # Process query through the query handler
-        result = await query_handler.process_query(
+        # Process query through the query handler with metadata for richer response
+        result = await query_handler.process_query_with_metadata(
             query=request.message,
             user_id=request.user_id,
             conversation_history=request.conversation_history,
             mode=request.mode
         )
-        
+
         return ChatResponse(
-            response=result["response"],
+            response=result.get("response", ""),
             query=request.message,
             user_id=request.user_id,
-            timestamp=result["timestamp"],
+            timestamp=result.get("timestamp", datetime.now().isoformat()),
             context_chunks_used=result.get("context_chunks_used", 0),
-            status=result["status"]
+            status=result.get("status", "success"),
+            llm_provider=result.get("llm_provider"),
+            llm_model=result.get("llm_model"),
+            confidence=result.get("llm_metadata", {}).get("confidence"),
+            escalated=result.get("llm_metadata", {}).get("escalated"),
+            citations=result.get("citations"),
+            tldr=result.get("tldr")
         )
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
+
+@app.post("/api/chat_benchmark")
+async def chat_benchmark_endpoint(request: ChatRequest):
+    """Benchmark chat endpoint: returns response plus provider/model/usage/metadata."""
+    try:
+        result = await query_handler.process_query_with_metadata(
+            query=request.message,
+            user_id=request.user_id,
+            conversation_history=request.conversation_history,
+            mode=request.mode
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing benchmark query: {str(e)}")
 
 @app.post("/api/upload", response_model=UploadResponse)
 async def upload_file(file: UploadFile = File(...)):
@@ -418,6 +441,282 @@ async def reset_database():
             raise HTTPException(status_code=500, detail="Failed to reset database")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")
+
+# Benchmark API endpoints
+@app.get("/api/benchmark/models")
+async def get_benchmark_models():
+    """Get list of available models for benchmarking."""
+    try:
+        config = BenchmarkConfig()
+        import asyncio
+        available_models = await config.detect_available_models()
+        
+        models_list = []
+        for model in available_models:
+            models_list.append({
+                "provider": model.provider,
+                "model": model.model_name,
+                "display_name": model.display_name,
+                "available": model.is_available
+            })
+        
+        return {
+            "models": models_list,
+            "total": len(models_list),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting models: {str(e)}")
+
+@app.post("/api/benchmark/run")
+async def run_benchmark_endpoint(
+    query: str = Form(...),
+    provider: str = Form(...),
+    model: str = Form(...),
+    mode: str = Form("exploration")
+):
+    """
+    Run a benchmark for a specific model with a single query.
+    Returns comprehensive metrics.
+    """
+    try:
+        # Initialize services
+        llm_service = HybridLLMService()
+        await llm_service.initialize()
+        
+        query_handler = QueryHandler()
+        await query_handler._ensure_llm_service_initialized()
+        
+        relevance_scorer = RelevanceScorer()
+        
+        # Map provider string to enum
+        provider_enum = None
+        if provider.lower() == "ollama":
+            provider_enum = LLMProvider.OLLAMA
+        elif provider.lower() == "openai":
+            provider_enum = LLMProvider.OPENAI
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+        
+        # Get context
+        context_chunks = await query_handler._get_relevant_context(query)
+        context_text = query_handler._build_context_text(context_chunks)
+        
+        # Build prompt
+        prompt = query_handler.prompt_templates.create_tutor_prompt(
+            query=query,
+            context=context_text,
+            conversation_history="",
+            mode=mode
+        )
+        
+        # Prepare messages
+        system_prompt = (
+            query_handler.prompt_templates.SYSTEM_ASSESSMENT 
+            if mode == "assessment" 
+            else query_handler.prompt_templates.SYSTEM_EXPLORATION
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt}
+        ]
+        
+        # Measure latency
+        start_time = datetime.now()
+        
+        # Generate response
+        response = await llm_service.generate_response_with_provider(
+            messages=messages,
+            provider=provider_enum,
+            model=model,
+            max_tokens=1000,
+            temperature=0.7
+        )
+        
+        latency_ms = (datetime.now() - start_time).total_seconds() * 1000.0
+        
+        # Build citations
+        citations = []
+        for chunk in context_chunks:
+            meta = chunk.get('metadata', {}) if isinstance(chunk, dict) else {}
+            citations.append({
+                'title': meta.get('title') or meta.get('filename') or 'Source',
+                'url': meta.get('url') or meta.get('source_url'),
+                'score': None
+            })
+        
+        # Calculate relevance scores
+        self_check_confidence = response.metadata.get('confidence', 0.0) if response.metadata else 0.0
+        scores = relevance_scorer.score_response(
+            response=response.content,
+            query=query,
+            self_check_confidence=self_check_confidence,
+            citations=citations
+        )
+        
+        return {
+            "query": query,
+            "provider": provider,
+            "model": model,
+            "response": response.content,
+            "latency_ms": round(latency_ms, 2),
+            "response_length": len(response.content),
+            "prompt_tokens": response.usage.get("prompt_tokens", 0),
+            "completion_tokens": response.usage.get("completion_tokens", 0),
+            "total_tokens": response.usage.get("total_tokens", 0),
+            "self_check_confidence": scores["self_check_confidence"],
+            "citation_score": scores["citation_score"],
+            "completeness_score": scores["completeness_score"],
+            "quality_score": scores["quality_score"],
+            "overall_score": scores["overall_score"],
+            "citations": citations,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Benchmark failed: {str(e)}")
+
+@app.post("/api/benchmark/compare")
+async def compare_models_endpoint(
+    query: str = Form(...),
+    models: Optional[str] = Form(None),  # JSON array of {"provider": "...", "model": "..."}
+    mode: str = Form("exploration")
+):
+    """
+    Compare multiple models with a single query.
+    If models not specified, compares all available models.
+    """
+    try:
+        # Initialize services
+        llm_service = HybridLLMService()
+        await llm_service.initialize()
+        
+        query_handler = QueryHandler()
+        await query_handler._ensure_llm_service_initialized()
+        
+        relevance_scorer = RelevanceScorer()
+        
+        # Parse models or get all available
+        if models:
+            import json
+            models_to_test = json.loads(models)
+        else:
+            config = BenchmarkConfig()
+            available_models = await config.detect_available_models()
+            models_to_test = [
+                {"provider": m.provider, "model": m.model_name}
+                for m in available_models if m.is_available
+            ]
+        
+        results = []
+        
+        for model_info in models_to_test:
+            provider_str = model_info["provider"]
+            model_name = model_info["model"]
+            
+            try:
+                # Map provider
+                provider_enum = None
+                if provider_str.lower() == "ollama":
+                    provider_enum = LLMProvider.OLLAMA
+                elif provider_str.lower() == "openai":
+                    provider_enum = LLMProvider.OPENAI
+                else:
+                    continue
+                
+                # Get context
+                context_chunks = await query_handler._get_relevant_context(query)
+                context_text = query_handler._build_context_text(context_chunks)
+                
+                # Build prompt
+                prompt = query_handler.prompt_templates.create_tutor_prompt(
+                    query=query,
+                    context=context_text,
+                    conversation_history="",
+                    mode=mode
+                )
+                
+                # Prepare messages
+                system_prompt = (
+                    query_handler.prompt_templates.SYSTEM_ASSESSMENT 
+                    if mode == "assessment" 
+                    else query_handler.prompt_templates.SYSTEM_EXPLORATION
+                )
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ]
+                
+                # Measure latency
+                start_time = datetime.now()
+                
+                # Generate response
+                response = await llm_service.generate_response_with_provider(
+                    messages=messages,
+                    provider=provider_enum,
+                    model=model_name,
+                    max_tokens=1000,
+                    temperature=0.7
+                )
+                
+                latency_ms = (datetime.now() - start_time).total_seconds() * 1000.0
+                
+                # Build citations
+                citations = []
+                for chunk in context_chunks:
+                    meta = chunk.get('metadata', {}) if isinstance(chunk, dict) else {}
+                    citations.append({
+                        'title': meta.get('title') or meta.get('filename') or 'Source',
+                        'url': meta.get('url') or meta.get('source_url'),
+                        'score': None
+                    })
+                
+                # Calculate relevance scores
+                self_check_confidence = response.metadata.get('confidence', 0.0) if response.metadata else 0.0
+                scores = relevance_scorer.score_response(
+                    response=response.content,
+                    query=query,
+                    self_check_confidence=self_check_confidence,
+                    citations=citations
+                )
+                
+                results.append({
+                    "provider": provider_str,
+                    "model": model_name,
+                    "response": response.content,
+                    "latency_ms": round(latency_ms, 2),
+                    "response_length": len(response.content),
+                    "prompt_tokens": response.usage.get("prompt_tokens", 0),
+                    "completion_tokens": response.usage.get("completion_tokens", 0),
+                    "total_tokens": response.usage.get("total_tokens", 0),
+                    "self_check_confidence": scores["self_check_confidence"],
+                    "citation_score": scores["citation_score"],
+                    "completeness_score": scores["completeness_score"],
+                    "quality_score": scores["quality_score"],
+                    "overall_score": scores["overall_score"],
+                    "citations_count": len(citations),
+                    "status": "success"
+                })
+                
+            except Exception as e:
+                results.append({
+                    "provider": provider_str,
+                    "model": model_name,
+                    "error": str(e),
+                    "status": "error"
+                })
+        
+        return {
+            "query": query,
+            "models_tested": len(results),
+            "results": results,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Comparison failed: {str(e)}")
 
 # WebSocket endpoint for real-time chat with streaming
 @app.websocket("/ws/chat")

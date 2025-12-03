@@ -110,6 +110,30 @@ mkdir -p backend_python/logs
 
 print_success "Directory setup completed ✅"
 
+# Check if Ollama is running, start if not
+print_status "Checking Ollama service..."
+if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+    print_warning "Ollama is not running. Starting Ollama service..."
+    if command -v ollama > /dev/null 2>&1; then
+        # Start Ollama in the background
+        ollama serve > /dev/null 2>&1 &
+        OLLAMA_PID=$!
+        # Wait a moment for Ollama to start
+        sleep 2
+        # Verify it started successfully
+        if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+            print_success "Ollama service started successfully (PID: $OLLAMA_PID)"
+        else
+            print_warning "Ollama may still be starting up. Continuing..."
+        fi
+    else
+        print_warning "Ollama command not found. Please install Ollama from https://ollama.ai/"
+        print_warning "Continuing without Ollama..."
+    fi
+else
+    print_success "Ollama service is already running ✅"
+fi
+
 # Kill any existing processes on our ports to prevent "address in use" errors
 print_status "Cleaning up existing processes..."
 if [ -f "scripts/kill-processes.sh" ]; then
@@ -136,6 +160,11 @@ cleanup() {
     echo ""
     print_status "Shutting down servers..."
     kill $(jobs -p) 2>/dev/null
+    # Kill Ollama if we started it
+    if [ -n "$OLLAMA_PID" ]; then
+        print_status "Stopping Ollama service (PID: $OLLAMA_PID)..."
+        kill $OLLAMA_PID 2>/dev/null || true
+    fi
     exit 0
 }
 

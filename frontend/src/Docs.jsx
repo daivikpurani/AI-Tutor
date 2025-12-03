@@ -21,6 +21,7 @@ function Docs() {
   const fetchDocuments = async () => {
     try {
       setLoading(true);
+      // Canonical backend: FastAPI on http://localhost:8000
       const response = await fetch('http://localhost:8000/api/documents');
       if (!response.ok) {
         throw new Error('Failed to fetch documents');
@@ -103,6 +104,7 @@ function Docs() {
       formData.append('file', file);
 
       try {
+        // Canonical backend: FastAPI on http://localhost:8000
         const response = await fetch('http://localhost:8000/api/upload', {
           method: 'POST',
           body: formData,

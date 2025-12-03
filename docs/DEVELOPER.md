@@ -485,7 +485,7 @@ pm2 start backend_python/main.py --name "ai-tutor"
 ```bash
 # Error: Port 3000 or 8000 already in use
 # Solution: Kill processes using the ports
-lsof -ti:3000 | xargs kill -9
+sslsof -ti:3000 | xargs kill -9
 lsof -ti:8000 | xargs kill -9
 ```
 

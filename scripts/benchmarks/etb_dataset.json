@@ -1,0 +1,596 @@
+[
+    {
+        "conversation_id": "ETB-001",
+        "type": "single_turn",
+        "domain": "rag",
+        "difficulty": "beginner",
+        "question_type": "conceptual_understanding",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "What is RAG?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "RAG combines retrieval with generation",
+                "Addresses LLM limitations",
+                "Two phases: retrieval and augmentation",
+                "Benefits: up-to-date info, domain-specific, transparency"
+            ],
+            "ground_truth_facts": {
+                "definition": "Retrieval-Augmented Generation combines LLMs with external knowledge retrieval",
+                "phases": ["retrieval", "augmentation"],
+                "benefits": ["up-to-date information", "domain-specific knowledge", "transparency", "reduced hallucination"]
+            },
+            "common_misconceptions": [
+                "RAG is the same as fine-tuning",
+                "RAG always improves accuracy"
+            ]
+        }
+    },
+    {
+        "conversation_id": "ETB-002",
+        "type": "single_turn",
+        "domain": "rag",
+        "difficulty": "intermediate",
+        "question_type": "how_it_works",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "How does RAG work step-by-step?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "Retrieval phase: search knowledge base",
+                "Augmentation phase: combine context with query",
+                "Vector database for semantic search",
+                "Embeddings for similarity matching"
+            ],
+            "ground_truth_facts": {
+                "phase_1": "Retrieval: search vector database for relevant chunks",
+                "phase_2": "Augmentation: combine retrieved context with query for LLM",
+                "components": ["vector database", "embedding model", "LLM", "retrieval mechanism"]
+            }
+        }
+    },
+    {
+        "conversation_id": "ETB-003",
+        "type": "single_turn",
+        "domain": "vector_databases",
+        "difficulty": "intermediate",
+        "question_type": "comparison",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "Compare ChromaDB and Pinecone for RAG applications.",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "ChromaDB: lightweight, open-source, local",
+                "Pinecone: managed service, high performance",
+                "Use cases and trade-offs",
+                "When to choose each"
+            ],
+            "ground_truth_facts": {
+                "chromadb": "Lightweight, open-source, easy to use, local deployment",
+                "pinecone": "Managed service, high performance, cloud-based",
+                "trade_offs": ["cost vs control", "performance vs simplicity"]
+            }
+        }
+    },
+    {
+        "conversation_id": "ETB-004",
+        "type": "single_turn",
+        "domain": "embeddings",
+        "difficulty": "beginner",
+        "question_type": "conceptual_understanding",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "What are embeddings and how do they work for document search?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "Dense vector representations",
+                "Capture semantic meaning",
+                "Similarity search capabilities",
+                "Neural network generation"
+            ],
+            "ground_truth_facts": {
+                "definition": "Dense vector representations of text capturing semantic meaning",
+                "generation": "Neural network models (BERT, GPT, sentence transformers)",
+                "similarity": "Cosine similarity, Euclidean distance, dot product"
+            }
+        }
+    },
+    {
+        "conversation_id": "ETB-005",
+        "type": "single_turn",
+        "domain": "rag",
+        "difficulty": "intermediate",
+        "question_type": "application",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "When would you use RAG vs fine-tuning?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "RAG: when you need up-to-date or domain-specific knowledge",
+                "Fine-tuning: when you need to change model behavior",
+                "Cost considerations",
+                "Use case scenarios"
+            ],
+            "ground_truth_facts": {
+                "rag_use_cases": ["up-to-date information", "domain-specific knowledge", "transparency"],
+                "finetuning_use_cases": ["behavior change", "style adaptation", "task-specific"],
+                "cost": "RAG avoids expensive fine-tuning"
+            }
+        }
+    },
+    {
+        "conversation_id": "ETB-006",
+        "type": "single_turn",
+        "domain": "embeddings",
+        "difficulty": "advanced",
+        "question_type": "troubleshooting",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "Why might embeddings fail to capture semantic similarity between related concepts?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "Domain mismatch",
+                "Training data limitations",
+                "Dimensionality issues",
+                "Model selection"
+            ],
+            "ground_truth_facts": {
+                "reasons": ["domain mismatch", "limited training data", "low dimensionality", "wrong model"]
+            }
+        }
+    },
+    {
+        "conversation_id": "ETB-007",
+        "type": "single_turn",
+        "domain": "transformers",
+        "difficulty": "intermediate",
+        "question_type": "conceptual_understanding",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "What is the attention mechanism and why is it important?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "Allows model to focus on relevant parts",
+                "Weighted sum of values",
+                "Long-range dependencies",
+                "Foundation of transformers"
+            ],
+            "ground_truth_facts": {
+                "definition": "Mechanism allowing model to focus on relevant parts of input",
+                "importance": "Enables long-range dependencies, parallel processing, interpretability"
+            }
+        }
+    },
+    {
+        "conversation_id": "ETB-008",
+        "type": "single_turn",
+        "domain": "transformers",
+        "difficulty": "advanced",
+        "question_type": "deep_dive",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "Explain the mathematical foundation of the attention mechanism.",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "Attention formula: softmax(QK^T / sqrt(d_k)) V",
+                "Query, Key, Value matrices",
+                "Scaling factor",
+                "Softmax normalization"
+            ],
+            "ground_truth_facts": {
+                "formula": "Attention(Q, K, V) = softmax(QK^T / sqrt(d_k)) V",
+                "components": ["Query (Q)", "Key (K)", "Value (V)", "scaling factor sqrt(d_k)"]
+            }
+        }
+    },
+    {
+        "conversation_id": "ETB-009",
+        "type": "single_turn",
+        "domain": "neural_networks",
+        "difficulty": "intermediate",
+        "question_type": "how_it_works",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "How does backpropagation work in neural networks?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "Computes gradients efficiently",
+                "Chain rule application",
+                "Backward pass through network",
+                "Weight updates"
+            ],
+            "ground_truth_facts": {
+                "purpose": "Efficiently compute gradients of loss function with respect to network parameters",
+                "method": "Chain rule, backward pass, gradient descent"
+            }
+        }
+    },
+    {
+        "conversation_id": "ETB-010",
+        "type": "single_turn",
+        "domain": "rag",
+        "difficulty": "intermediate",
+        "question_type": "synthesis",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "How do embeddings, vector databases, and LLMs work together in RAG?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "Embeddings convert text to vectors",
+                "Vector databases store and search embeddings",
+                "LLMs generate responses using retrieved context",
+                "Integration workflow"
+            ],
+            "ground_truth_facts": {
+                "workflow": "Embeddings -> Vector DB -> Retrieval -> LLM -> Response"
+            }
+        }
+    },
+    {
+        "conversation_id": "ETB-011",
+        "type": "multi_turn",
+        "domain": "rag",
+        "difficulty": "intermediate",
+        "question_type": "progressive_learning",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "What is RAG?",
+                "student_mistakes": null,
+                "student_confusion": null
+            },
+            {
+                "turn_id": 2,
+                "role": "student",
+                "content": "How does it differ from fine-tuning?",
+                "student_mistakes": null,
+                "student_confusion": null
+            },
+            {
+                "turn_id": 3,
+                "role": "student",
+                "content": "When should I use RAG in my project?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "scenario": "progressive_learning",
+            "expected_progression": [
+                "Basic RAG concept",
+                "Comparison with alternatives",
+                "Practical application guidance"
+            ]
+        }
+    },
+    {
+        "conversation_id": "ETB-012",
+        "type": "multi_turn",
+        "domain": "embeddings",
+        "difficulty": "intermediate",
+        "question_type": "clarification_chain",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "How do embeddings work?",
+                "student_mistakes": null,
+                "student_confusion": null
+            },
+            {
+                "turn_id": 2,
+                "role": "student",
+                "content": "What do you mean by semantic meaning?",
+                "student_mistakes": null,
+                "student_confusion": "semantic meaning concept"
+            },
+            {
+                "turn_id": 3,
+                "role": "student",
+                "content": "Can you give me a concrete example?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "scenario": "clarification_chain",
+            "expected_clarifications": [
+                "Initial explanation",
+                "Semantic meaning clarification",
+                "Concrete example"
+            ]
+        }
+    },
+    {
+        "conversation_id": "ETB-013",
+        "type": "multi_turn",
+        "domain": "rag",
+        "difficulty": "intermediate",
+        "question_type": "misconception_correction",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "RAG is just another name for fine-tuning, right?",
+                "student_mistakes": ["RAG is the same as fine-tuning"],
+                "student_confusion": "confusing RAG with fine-tuning"
+            },
+            {
+                "turn_id": 2,
+                "role": "student",
+                "content": "So RAG always makes models more accurate?",
+                "student_mistakes": ["RAG always improves accuracy"],
+                "student_confusion": "overgeneralizing RAG benefits"
+            }
+        ],
+        "metadata": {
+            "scenario": "misconception_correction",
+            "common_misconceptions": [
+                "RAG is the same as fine-tuning",
+                "RAG always improves accuracy"
+            ],
+            "expected_corrections": [
+                "Clarify difference between RAG and fine-tuning",
+                "Explain when RAG helps and when it doesn't"
+            ]
+        }
+    },
+    {
+        "conversation_id": "ETB-014",
+        "type": "single_turn",
+        "domain": "vector_databases",
+        "difficulty": "beginner",
+        "question_type": "conceptual_understanding",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "What is a vector database?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "Specialized database for high-dimensional vectors",
+                "Efficient similarity search",
+                "Essential for semantic search and RAG",
+                "Indexing structures"
+            ],
+            "ground_truth_facts": {
+                "definition": "Specialized database designed to store, index, and query high-dimensional vectors efficiently",
+                "use_cases": ["semantic search", "recommendation systems", "RAG applications"]
+            }
+        }
+    },
+    {
+        "conversation_id": "ETB-015",
+        "type": "single_turn",
+        "domain": "transformers",
+        "difficulty": "beginner",
+        "question_type": "conceptual_understanding",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "What is a transformer model?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "Neural network architecture",
+                "Attention mechanism foundation",
+                "Parallel processing capability",
+                "Foundation for modern LLMs"
+            ],
+            "ground_truth_facts": {
+                "definition": "Neural network architecture based on attention mechanism",
+                "key_features": ["parallel processing", "long-range dependencies", "scalability"]
+            }
+        }
+    },
+    {
+        "conversation_id": "ETB-016",
+        "type": "single_turn",
+        "domain": "ai_ml",
+        "difficulty": "intermediate",
+        "question_type": "comparison",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "What are the differences between supervised and unsupervised learning?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "Supervised: labeled data, specific tasks",
+                "Unsupervised: unlabeled data, pattern discovery",
+                "Use cases for each",
+                "Examples"
+            ],
+            "ground_truth_facts": {
+                "supervised": "Uses labeled data, learns mapping from input to output",
+                "unsupervised": "Uses unlabeled data, discovers patterns and structures"
+            }
+        }
+    },
+    {
+        "conversation_id": "ETB-017",
+        "type": "single_turn",
+        "domain": "neural_networks",
+        "difficulty": "advanced",
+        "question_type": "deep_dive",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "Explain the mathematical foundation of backpropagation in detail.",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "Chain rule application",
+                "Gradient computation",
+                "Backward pass algorithm",
+                "Mathematical derivation"
+            ],
+            "ground_truth_facts": {
+                "mathematical_basis": "Chain rule of calculus for computing gradients",
+                "algorithm": "Backward pass computing gradients layer by layer"
+            }
+        }
+    },
+    {
+        "conversation_id": "ETB-018",
+        "type": "single_turn",
+        "domain": "rag",
+        "difficulty": "intermediate",
+        "question_type": "assessment",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "What happens if retrieval returns irrelevant context in RAG?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "Response quality degradation",
+                "Potential hallucinations",
+                "Mitigation strategies",
+                "Importance of good retrieval"
+            ],
+            "ground_truth_facts": {
+                "impact": "Can lead to incorrect or irrelevant responses",
+                "solutions": ["Better retrieval", "reranking", "filtering"]
+            }
+        }
+    },
+    {
+        "conversation_id": "ETB-019",
+        "type": "single_turn",
+        "domain": "embeddings",
+        "difficulty": "intermediate",
+        "question_type": "application",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "When would you use cosine similarity vs Euclidean distance for embeddings?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "Cosine: angle-based, magnitude-independent",
+                "Euclidean: distance-based, magnitude-sensitive",
+                "Use cases for each",
+                "When to choose which"
+            ],
+            "ground_truth_facts": {
+                "cosine": "Angle-based, ignores magnitude, good for normalized vectors",
+                "euclidean": "Distance-based, considers magnitude, good for absolute differences"
+            }
+        }
+    },
+    {
+        "conversation_id": "ETB-020",
+        "type": "single_turn",
+        "domain": "transformers",
+        "difficulty": "intermediate",
+        "question_type": "how_it_works",
+        "turns": [
+            {
+                "turn_id": 1,
+                "role": "student",
+                "content": "How does self-attention work in transformers?",
+                "student_mistakes": null,
+                "student_confusion": null
+            }
+        ],
+        "metadata": {
+            "expected_key_points": [
+                "Queries, keys, values from same sequence",
+                "Attention weights computation",
+                "Weighted sum of values",
+                "Parallel processing"
+            ],
+            "ground_truth_facts": {
+                "definition": "Attention mechanism where Q, K, V all come from same sequence",
+                "benefit": "Allows each position to attend to all positions in sequence"
+            }
+        }
+    }
+]
+

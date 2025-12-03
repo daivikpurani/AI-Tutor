@@ -73,8 +73,29 @@ OPENAI_API_KEY=your_openai_api_key_here
 # Optional: Customize settings
 CHUNK_SIZE=1000
 CHUNK_OVERLAP=200
-SIMILARITY_THRESHOLD=0.8
 ```
+
+## 💡 Session Memory (Per-Session Conversation Chaining)
+
+- The backend maintains short-term conversation memory per session using the `user_id` you send on each request.
+- To enable multi-step, context-aware answers, send the same `user_id` across consecutive messages in a session.
+- Memory is kept in-process only and limited to the most recent turns for that `user_id`. It is not persisted across server restarts.
+- For HTTP chat, include `user_id` in the `ChatRequest` body. For WebSocket chat, include `user_id` when establishing the session and in subsequent messages.
+
+Example HTTP body:
+```json
+{
+  "message": "Explain backpropagation",
+  "user_id": "session-1234"
+}
+```
+
+## 📚 Document-Grounded Responses
+
+- The assistant answers strictly using the retrieved documents from the vector database.
+- If the answer is not present in the retrieved context, the assistant will say so.
+- When documents conflict, the assistant acknowledges and summarizes the differences.
+- Responses begin with a direct answer, followed by brief supporting details, in a professional conversational tone.
 
 ## 📡 **API Endpoints**
 
