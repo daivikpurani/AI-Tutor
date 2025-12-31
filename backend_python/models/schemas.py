@@ -44,6 +44,22 @@ class UploadResponse(BaseModel):
     chunks_created: int = Field(0, description="Number of chunks created")
     status: str = Field(..., description="Upload status")
 
+class FileUploadResult(BaseModel):
+    """Result for a single file upload."""
+    filename: str = Field(..., description="Name of uploaded file")
+    chunks_created: int = Field(0, description="Number of chunks created")
+    status: str = Field(..., description="Upload status (success/error)")
+    error: Optional[str] = Field(None, description="Error message if status is error")
+
+class MultipleUploadResponse(BaseModel):
+    """Response model for multiple file upload endpoint."""
+    message: str = Field(..., description="Overall status message")
+    total_files: int = Field(..., description="Total number of files processed")
+    successful: int = Field(..., description="Number of successfully uploaded files")
+    failed: int = Field(..., description="Number of failed uploads")
+    results: List[FileUploadResult] = Field(..., description="Individual file upload results")
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+
 class HealthResponse(BaseModel):
     """Response model for health check endpoint."""
     status: str = Field(..., description="Overall health status")

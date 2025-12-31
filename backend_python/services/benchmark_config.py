@@ -31,8 +31,6 @@ class BenchmarkConfig:
     
     # Default models to benchmark
     DEFAULT_OLLAMA_MODELS = [
-        "llama3.1:8b-instruct",
-        "llama3.2:latest",
         "llama3.3:latest",
         "mistral:7b-instruct",
         "phi3:mini"

@@ -18,13 +18,13 @@ class DocumentChunker:
     Supports various file formats and intelligent text splitting.
     """
     
-    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
+    def __init__(self, chunk_size: int = 1500, chunk_overlap: int = 250):
         """
         Initialize the document chunker.
         
         Args:
-            chunk_size: Maximum size of each chunk in characters
-            chunk_overlap: Number of characters to overlap between chunks
+            chunk_size: Maximum size of each chunk in characters (default 1500 for papers/slides)
+            chunk_overlap: Number of characters to overlap between chunks (default 250, ~15-20%)
         """
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
@@ -34,7 +34,13 @@ class DocumentChunker:
     
     def chunk_text(self, text: str, source: str = "text_input") -> List[Dict[str, Any]]:
         """
-        Split text into overlapping chunks.
+        Split text into overlapping chunks with intelligent boundary detection.
+        Optimized for academic papers and PDF slides/decks.
+        
+        Boundary detection priority:
+        1. Paragraph breaks (double newline)
+        2. Section markers (headers, numbered sections)
+        3. Smart sentence detection (ignores formatting periods)
         
         Args:
             text: Input text to chunk
@@ -54,13 +60,53 @@ class DocumentChunker:
         while start < len(text):
             end = start + self.chunk_size
             
-            # Try to break at sentence boundaries
+            # Intelligent boundary detection (only if we haven't reached end of text)
             if end < len(text):
-                # Look for sentence endings within the last 200 characters
-                search_start = max(start, end - 200)
-                sentence_end = text.rfind('.', search_start, end)
-                if sentence_end > start:
-                    end = sentence_end + 1
+                chunk_ratio = (end - start) / self.chunk_size
+                
+                # Priority 1: Try paragraph breaks (double newline) - best for semantic coherence
+                # Only use if chunk is >70% of target size (avoid tiny chunks)
+                if chunk_ratio > 0.7:
+                    para_break = text.rfind('\n\n', start, end)
+                    if para_break > start + (self.chunk_size * 0.7):
+                        end = para_break + 2
+                        logger.debug(f"Chunk {chunk_id}: Split at paragraph break at position {end}")
+                
+                # Priority 2: Try section markers (headers, numbered sections)
+                # Look for section patterns in last 300 characters
+                elif chunk_ratio > 0.8:
+                    search_start = max(start, end - 300)
+                    search_text = text[search_start:end]
+                    
+                    # Look for markdown headers (#, ##, ###)
+                    md_header = search_text.rfind('\n#')
+                    if md_header > 0:
+                        end = search_start + md_header + 1
+                        logger.debug(f"Chunk {chunk_id}: Split at markdown header at position {end}")
+                    else:
+                        # Look for numbered sections (1., 2., etc. or 1.1, 1.2, etc.)
+                        section_pattern = re.search(r'\n\s*\d+\.\s+', search_text)
+                        if section_pattern:
+                            end = search_start + section_pattern.start() + 1
+                            logger.debug(f"Chunk {chunk_id}: Split at numbered section at position {end}")
+                
+                # Priority 3: Smart sentence detection (only in last 100 chars)
+                # Only use if chunk is >90% of target size
+                elif chunk_ratio > 0.9:
+                    search_start = max(start, end - 100)
+                    
+                    # Look for period followed by space (real sentence end)
+                    # This avoids breaking on formatting periods like "§", "1.", "a."
+                    sentence_end = text.rfind('. ', search_start, end)
+                    if sentence_end > start and sentence_end > search_start:
+                        # Verify it's not a formatting period
+                        # Check if there's a single char/number/special char before the period
+                        if sentence_end > 0:
+                            char_before = text[sentence_end - 1]
+                            # Only break if it's a real sentence (not single char/number/special)
+                            if char_before not in '0123456789§abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ':
+                                end = sentence_end + 2
+                                logger.debug(f"Chunk {chunk_id}: Split at sentence boundary at position {end}")
             
             chunk_text = text[start:end].strip()
             
@@ -88,7 +134,7 @@ class DocumentChunker:
         for chunk in chunks:
             chunk['metadata']['total_chunks'] = len(chunks)
         
-        logger.info(f"Created {len(chunks)} chunks from text (source: {source})")
+        logger.info(f"Created {len(chunks)} chunks from text (source: {source}, avg size: {sum(len(c['text']) for c in chunks) / len(chunks) if chunks else 0:.0f} chars)")
         return chunks
     
     def chunk_file(self, file_path: str) -> List[Dict[str, Any]]:

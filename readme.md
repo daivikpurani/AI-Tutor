@@ -300,8 +300,7 @@ npm run dev:backend      # Run backend only
 npm run dev:frontend     # Run frontend only
 
 # Python scripts
-npm run python:chunker   # Test document chunker
-npm run python:query     # Test query handler
+npm run python:test      # Run Python tests
 
 # Building and deployment
 npm run build            # Build frontend for production
@@ -350,10 +349,9 @@ npm run fresh-install    # Clean and reinstall everything
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:8000
 
-5. **Test the Python scripts**
+5. **Test the backend**
    ```bash
-   npm run python:chunker
-   npm run python:query
+   npm run test:backend
    ```
 
 6. **Begin exploring the chatbot interface**

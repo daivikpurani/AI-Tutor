@@ -5,10 +5,11 @@
   "main": "backend_python/main.py",
   "scripts": {
     "start": "cd backend_python && python3 main.py",
-    "dev": "npm run cleanup && concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "bash start-dev.sh",
     "dev:all": "npm run dev",
     "dev:backend": "cd backend_python && python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload",
     "dev:frontend": "cd frontend && npm run dev",
+    "dev:simple": "npm run cleanup && concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "cleanup": "bash scripts/kill-processes.sh",
     "kill": "bash scripts/kill-ai-tutor.sh",
     "build": "cd frontend && npm run build",
@@ -18,8 +19,6 @@
     "install:all": "npm install && cd frontend && npm install",
     "setup": "npm run install:all && pip install -r scripts/requirements.txt",
     "python:test": "cd scripts && python -m pytest",
-    "python:chunker": "cd scripts && python chunker.py",
-    "python:query": "cd scripts && python query_handler.py",
     "clean": "rm -rf node_modules frontend/node_modules",
     "fresh-install": "npm run clean && npm run setup"
   },
@@ -35,6 +34,7 @@
   "author": "Ai-Tutor Research Team",
   "license": "UNLICENSED",
   "devDependencies": {
+    "baseline-browser-mapping": "^2.9.0",
     "concurrently": "^8.2.2"
   },
   "engines": {

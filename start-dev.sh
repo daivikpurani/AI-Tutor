@@ -94,10 +94,39 @@ if [ ! -d "frontend/node_modules" ]; then
     cd frontend && npm install && cd ..
 fi
 
+# Check for virtual environment and set Python commands
+VENV_PYTHON=""
+VENV_PIP=""
+if [ -d "venv" ]; then
+    print_status "Found virtual environment at ./venv"
+    VENV_PYTHON="$(pwd)/venv/bin/python"
+    VENV_PIP="$(pwd)/venv/bin/pip"
+    PYTHON_CMD="$VENV_PYTHON"
+    PIP_CMD="$VENV_PIP"
+elif [ -d "backend_python/venv" ]; then
+    print_status "Found backend virtual environment at ./backend_python/venv"
+    VENV_PYTHON="$(pwd)/backend_python/venv/bin/python"
+    VENV_PIP="$(pwd)/backend_python/venv/bin/pip"
+    PYTHON_CMD="$VENV_PYTHON"
+    PIP_CMD="$VENV_PIP"
+else
+    print_warning "No virtual environment found. Using system Python..."
+    PYTHON_CMD="python3"
+    PIP_CMD="pip3"
+fi
+
 # Check if Python dependencies are installed
-if ! python3 -c "import fastapi, chromadb, openai" 2>/dev/null; then
+print_status "Checking Python dependencies..."
+if ! $PYTHON_CMD -c "import fastapi, chromadb, openai, uvicorn" 2>/dev/null; then
     print_status "Installing Python dependencies..."
-    pip3 install -r backend_python/requirements.txt
+    $PIP_CMD install -r backend_python/requirements.txt
+    if [ $? -ne 0 ]; then
+        print_error "Failed to install Python dependencies"
+        exit 1
+    fi
+    print_success "Python dependencies installed ✅"
+else
+    print_success "Python dependencies are installed ✅"
 fi
 
 print_success "Dependencies check completed ✅"
@@ -112,6 +141,7 @@ print_success "Directory setup completed ✅"
 
 # Check if Ollama is running, start if not
 print_status "Checking Ollama service..."
+OLLAMA_PID=""
 if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
     print_warning "Ollama is not running. Starting Ollama service..."
     if command -v ollama > /dev/null 2>&1; then
@@ -119,11 +149,21 @@ if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
         ollama serve > /dev/null 2>&1 &
         OLLAMA_PID=$!
         # Wait a moment for Ollama to start
-        sleep 2
-        # Verify it started successfully
-        if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-            print_success "Ollama service started successfully (PID: $OLLAMA_PID)"
-        else
+        sleep 3
+        # Verify it started successfully with retries
+        max_retries=5
+        retry_count=0
+        while [ $retry_count -lt $max_retries ]; do
+            if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+                print_success "Ollama service started successfully (PID: $OLLAMA_PID)"
+                break
+            fi
+            retry_count=$((retry_count + 1))
+            if [ $retry_count -lt $max_retries ]; then
+                sleep 1
+            fi
+        done
+        if [ $retry_count -eq $max_retries ]; then
             print_warning "Ollama may still be starting up. Continuing..."
         fi
     else
@@ -159,11 +199,19 @@ echo ""
 cleanup() {
     echo ""
     print_status "Shutting down servers..."
-    kill $(jobs -p) 2>/dev/null
+    # Kill all background jobs (backend and frontend)
+    kill $(jobs -p) 2>/dev/null || true
+    # Wait a moment for graceful shutdown
+    sleep 1
+    # Force kill if still running
+    kill -9 $(jobs -p) 2>/dev/null || true
     # Kill Ollama if we started it
-    if [ -n "$OLLAMA_PID" ]; then
+    if [ -n "$OLLAMA_PID" ] && kill -0 $OLLAMA_PID 2>/dev/null; then
         print_status "Stopping Ollama service (PID: $OLLAMA_PID)..."
         kill $OLLAMA_PID 2>/dev/null || true
+        sleep 1
+        # Force kill if still running
+        kill -9 $OLLAMA_PID 2>/dev/null || true
     fi
     exit 0
 }
@@ -172,12 +220,23 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 # Start both servers using concurrently
+# Use npx to ensure concurrently is available
+# Use absolute path for Python to ensure venv is used in subshells
+BACKEND_CMD="cd backend_python && $PYTHON_CMD -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+FRONTEND_CMD="cd frontend && npm run dev"
+
+print_status "Starting backend with: $PYTHON_CMD"
+print_status "Starting frontend..."
+
 npx concurrently \
     --kill-others \
     --prefix "[{name}]" \
     --prefix-colors "cyan,magenta" \
     --names "backend,frontend" \
-    "cd backend_python && python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload" \
-    "cd frontend && npm run dev"
+    "$BACKEND_CMD" \
+    "$FRONTEND_CMD"
+
+# Cleanup if we exit normally (shouldn't happen, but just in case)
+cleanup
 
 print_success "Development environment started! 🎉"

@@ -153,7 +153,7 @@ ws.onopen = () => {
 
 Run the comprehensive test suite:
 ```bash
-python test_backend.py
+pytest tests/
 ```
 
 This will test:
@@ -209,7 +209,7 @@ backend_python/
 ├── main.py                 # FastAPI application
 ├── requirements.txt        # Dependencies
 ├── start.sh               # Startup script
-├── test_backend.py        # Test suite
+├── tests/                 # Test suite
 ├── services/
 │   ├── query_handler.py   # LLM integration
 │   ├── vector_db.py       # ChromaDB service

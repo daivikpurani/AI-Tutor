@@ -211,26 +211,86 @@ class OllamaProvider(BaseLLMProvider):
         super().__init__(LLMProvider.OLLAMA)
         self.base_url = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
         self.default_model = os.getenv('OLLAMA_DEFAULT_MODEL', 'llama2')
+        self.available_models = []
+    
+    async def _detect_available_models(self) -> List[str]:
+        """Detect available Ollama models via API."""
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(f"{self.base_url}/api/tags")
+                if response.status_code == 200:
+                    data = response.json()
+                    models = []
+                    for model_info in data.get("models", []):
+                        model_name = model_info.get("name", "")
+                        if model_name:
+                            models.append(model_name)
+                    logger.info(f"Detected Ollama models: {models}")
+                    return models
+                else:
+                    logger.warning(f"Ollama API returned status {response.status_code}")
+                    return []
+        except Exception as e:
+            logger.warning(f"Failed to detect Ollama models: {e}")
+            return []
+    
+    async def _find_available_model(self, preferred_model: str = None) -> Optional[str]:
+        """Find an available model, preferring the specified one if available."""
+        if not self.available_models:
+            self.available_models = await self._detect_available_models()
+        
+        if not self.available_models:
+            return None
+        
+        # If preferred model is specified and available, use it
+        if preferred_model:
+            # Check exact match first
+            if preferred_model in self.available_models:
+                return preferred_model
+            # Check if any model starts with preferred (e.g., "llama3" matches "llama3.1:8b-instruct")
+            for model in self.available_models:
+                if model.startswith(preferred_model.split(':')[0]):
+                    return model
+        
+        # Return first available model
+        return self.available_models[0]
     
     async def initialize(self) -> bool:
         """Initialize Ollama client."""
         try:
             # Sync defaults from settings if available
+            preferred_model = None
             try:
                 from utils.config import settings
                 if getattr(settings, 'ollama_base_url', None):
                     self.base_url = settings.ollama_base_url
                 if getattr(settings, 'ollama_default_model', None):
-                    self.default_model = settings.ollama_default_model
+                    preferred_model = settings.ollama_default_model
+                    self.default_model = preferred_model
             except Exception:
                 pass
-            # Test connection to Ollama server
+            
+            # Test connection to Ollama server and detect available models
             async with httpx.AsyncClient() as client:
                 response = await client.get(f"{self.base_url}/api/tags", timeout=5.0)
                 if response.status_code == 200:
-                    self.is_available = True
-                    logger.info("Ollama provider initialized successfully")
-                    return True
+                    # Detect available models
+                    self.available_models = await self._detect_available_models()
+                    
+                    if not self.available_models:
+                        logger.warning("Ollama server is running but no models are available")
+                        return False
+                    
+                    # Find and set an available model
+                    available_model = await self._find_available_model(preferred_model)
+                    if available_model:
+                        self.default_model = available_model
+                        self.is_available = True
+                        logger.info(f"Ollama provider initialized successfully with model: {self.default_model}")
+                        return True
+                    else:
+                        logger.warning("No suitable Ollama model found")
+                        return False
                 else:
                     logger.warning(f"Ollama server not responding: {response.status_code}")
                     return False
@@ -264,7 +324,16 @@ class OllamaProvider(BaseLLMProvider):
         if not self.is_available:
             raise RuntimeError("Ollama provider not available")
         
-        model = model or self.default_model
+        # Find available model if specified model doesn't exist
+        requested_model = model or self.default_model
+        model = await self._find_available_model(requested_model)
+        
+        if not model:
+            raise RuntimeError(f"Ollama model '{requested_model}' not found and no alternative models available")
+        
+        # If we had to switch models, log it
+        if model != requested_model:
+            logger.warning(f"Ollama model '{requested_model}' not available, using '{model}' instead")
         
         try:
             # Convert messages to Ollama format
@@ -299,6 +368,36 @@ class OllamaProvider(BaseLLMProvider):
             
         except Exception as e:
             logger.error(f"Ollama API error: {e}")
+            # Check if it's a model not found error and try alternative
+            error_str = str(e).lower()
+            if "not found" in error_str or "model" in error_str:
+                alternative_model = await self._find_available_model()
+                if alternative_model and alternative_model != model:
+                    logger.info(f"Retrying with alternative model: {alternative_model}")
+                    try:
+                        response = ollama.chat(
+                            model=alternative_model,
+                            messages=[{"role": "user", "content": prompt}],
+                            options={
+                                "temperature": temperature,
+                                "num_predict": max_tokens,
+                            }
+                        )
+                        response_content = response['message']['content']
+                        prompt_tokens = self._estimate_tokens(prompt)
+                        completion_tokens = self._estimate_tokens(response_content)
+                        return LLMResponse(
+                            content=response_content,
+                            provider=self.provider,
+                            model=alternative_model,
+                            usage={
+                                "prompt_tokens": prompt_tokens,
+                                "completion_tokens": completion_tokens,
+                                "total_tokens": prompt_tokens + completion_tokens
+                            }
+                        )
+                    except Exception as retry_error:
+                        logger.error(f"Retry with alternative model also failed: {retry_error}")
             raise
     
     async def generate_streaming_response(
@@ -313,7 +412,16 @@ class OllamaProvider(BaseLLMProvider):
         if not self.is_available:
             raise RuntimeError("Ollama provider not available")
         
-        model = model or self.default_model
+        # Find available model if specified model doesn't exist
+        requested_model = model or self.default_model
+        model = await self._find_available_model(requested_model)
+        
+        if not model:
+            raise RuntimeError(f"Ollama model '{requested_model}' not found and no alternative models available")
+        
+        # If we had to switch models, log it
+        if model != requested_model:
+            logger.warning(f"Ollama model '{requested_model}' not available, using '{model}' instead")
         
         try:
             # Convert messages to Ollama format
@@ -346,6 +454,31 @@ class OllamaProvider(BaseLLMProvider):
                     
         except Exception as e:
             logger.error(f"Ollama streaming API error: {e}")
+            # Check if it's a model not found error
+            error_str = str(e).lower()
+            if "not found" in error_str or "model" in error_str:
+                # Try to find another available model
+                alternative_model = await self._find_available_model()
+                if alternative_model and alternative_model != model:
+                    logger.info(f"Retrying with alternative model: {alternative_model}")
+                    try:
+                        stream = ollama.chat(
+                            model=alternative_model,
+                            messages=[{"role": "user", "content": prompt}],
+                            options={
+                                "temperature": temperature,
+                                "num_predict": max_tokens,
+                            },
+                            stream=True
+                        )
+                        for chunk in stream:
+                            if 'message' in chunk and 'content' in chunk['message']:
+                                content = chunk['message']['content']
+                                if content and content.strip():
+                                    yield content
+                        return
+                    except Exception as retry_error:
+                        logger.error(f"Retry with alternative model also failed: {retry_error}")
             raise
     
     def _convert_messages_to_prompt(self, messages: List[Dict[str, str]]) -> str:
@@ -786,13 +919,16 @@ class HybridLLMService:
                 **kwargs
             ):
                 yield chunk
+            return  # Successfully completed
                 
         except Exception as e:
             logger.error(f"Error with provider {provider.provider.value}: {e}")
             
-            # Try fallback providers
-            for fallback_provider in self.providers.values():
-                if fallback_provider.is_available and fallback_provider != provider:
+            # Try fallback providers in order: OpenAI -> Mock (skip the failed one)
+            fallback_order = [LLMProvider.OPENAI, LLMProvider.MOCK]
+            for provider_type in fallback_order:
+                fallback_provider = self.providers.get(provider_type)
+                if fallback_provider and fallback_provider.is_available and fallback_provider != provider:
                     try:
                         logger.info(f"Trying fallback provider: {fallback_provider.provider.value}")
                         async for chunk in fallback_provider.generate_streaming_response(
@@ -803,13 +939,31 @@ class HybridLLMService:
                             **kwargs
                         ):
                             yield chunk
-                        return
+                        return  # Successfully completed with fallback
                     except Exception as fallback_error:
                         logger.warning(f"Fallback provider {fallback_provider.provider.value} also failed: {fallback_error}")
                         continue
             
-            # All providers failed, yield error message
-            yield f"Error: Unable to generate response. All providers failed. Original error: {str(e)}"
+            # All providers failed, but Mock should always work - try it one more time
+            mock_provider = self.providers.get(LLMProvider.MOCK)
+            if mock_provider:
+                try:
+                    logger.warning("All primary providers failed, using mock provider as last resort")
+                    async for chunk in mock_provider.generate_streaming_response(
+                        messages=messages,
+                        model=model,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        **kwargs
+                    ):
+                        yield chunk
+                    return
+                except Exception:
+                    pass
+            
+            # Absolute last resort: yield a helpful error message
+            error_msg = f"I apologize, but I'm having trouble connecting to the AI service right now. Please try again in a moment."
+            yield error_msg
     
     def get_available_providers(self) -> List[str]:
         """Get list of available provider names."""

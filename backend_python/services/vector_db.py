@@ -8,8 +8,30 @@ import uuid
 import shutil
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+
+# Apply ChromaDB compatibility patch before importing
+import chromadb_patch  # noqa: F401
+
 import chromadb
-from chromadb.config import Settings
+# Patch ChromaDB telemetry to suppress capture() errors
+try:
+    import chromadb.telemetry.client as telemetry_client
+    if hasattr(telemetry_client, 'TelemetryClient'):
+        original_capture = getattr(telemetry_client.TelemetryClient, 'capture', None)
+        if original_capture and callable(original_capture):
+            def safe_capture(self, *args, **kwargs):
+                """Suppress telemetry capture errors."""
+                try:
+                    return original_capture(self, *args, **kwargs)
+                except (TypeError, Exception) as e:
+                    # Silently ignore telemetry errors, especially the capture() argument mismatch
+                    logger.debug(f"Telemetry error suppressed: {e}")
+                    pass
+            telemetry_client.TelemetryClient.capture = safe_capture
+except (ImportError, AttributeError, Exception):
+    # If telemetry patching fails, continue anyway
+    pass
+
 from sentence_transformers import SentenceTransformer
 import logging
 
@@ -53,14 +75,9 @@ class VectorDatabase:
             # Ensure directory exists
             os.makedirs(self.persist_directory, exist_ok=True)
             
-            # ChromaDB 0.3.23 uses Client() with Settings, not PersistentClient
-            settings = Settings(
-                persist_directory=self.persist_directory,
-                chroma_db_impl="duckdb",
-                chroma_api_impl="local"
-            )
-            self.client = chromadb.Client(settings=settings)
-            logger.info(f"ChromaDB client initialized with persistence at: {self.persist_directory}")
+            # ChromaDB 1.3.5+ uses PersistentClient (modern, stable API)
+            self.client = chromadb.PersistentClient(path=self.persist_directory)
+            logger.info(f"ChromaDB PersistentClient initialized at: {self.persist_directory}")
         except Exception as e:
             logger.error(f"Failed to initialize ChromaDB client: {e}")
             raise
@@ -93,23 +110,19 @@ class VectorDatabase:
     def _initialize_collection(self):
         """Initialize or get the document collection."""
         try:
-            # Create embedding function for ChromaDB
-            embedding_function = self._get_embedding_function()
-            
-            # Use configured collection name
+            # For ChromaDB 0.3.23: Create collection WITHOUT embedding function
+            # We generate embeddings manually to avoid the collection.add() bug
+            # This is the most stable approach used in production
             try:
-                self.collection = self.client.get_collection(
-                    name=self.collection_name,
-                    embedding_function=embedding_function
-                )
-                logger.info(f"Connected to existing '{self.collection_name}' collection")
+                self.collection = self.client.get_collection(name=self.collection_name)
+                logger.info(f"Using existing '{self.collection_name}' collection")
             except:
-                self.collection = self.client.get_or_create_collection(
+                # Collection doesn't exist, create it without embedding function
+                self.collection = self.client.create_collection(
                     name=self.collection_name,
-                    embedding_function=embedding_function,
                     metadata={"description": "AI Tutor documents", "created_at": datetime.now().isoformat()}
                 )
-                logger.info(f"Created new '{self.collection_name}' collection")
+                logger.info(f"Created '{self.collection_name}' collection")
         except Exception as e:
             logger.error(f"Failed to initialize collection: {e}")
             raise
@@ -157,9 +170,18 @@ class VectorDatabase:
                 logger.warning(f"No valid documents to add for {filename}")
                 return False
             
-            # Add to ChromaDB collection
+            # Generate embeddings manually to bypass ChromaDB 0.3.23 bug
+            # This is the most stable approach used by production applications
+            embeddings = self.embedding_model.encode(documents, convert_to_tensor=False)
+            if hasattr(embeddings, 'tolist'):
+                embeddings = embeddings.tolist()
+            elif hasattr(embeddings, 'numpy'):
+                embeddings = embeddings.numpy().tolist()
+            
+            # Add documents with explicit embeddings (bypasses collection embedding function bug)
             self.collection.add(
                 documents=documents,
+                embeddings=embeddings,
                 metadatas=metadatas,
                 ids=ids
             )

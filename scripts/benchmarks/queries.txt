@@ -23,3 +23,75 @@ What are the main challenges in training large language models?
 ?
 Explain RAG and vector databases and embeddings and transformers.
 What is the meaning of life?
+
+# Answerable Questions (from Course Materials - Algorithms/Analysis)
+# These questions should be answerable based on uploaded course materials
+What is the formal definition of an α-approximation algorithm for a minimization problem?
+In the vertex cover approximation algorithm, what structure is computed before selecting vertices?
+What inequality relates the size of a maximal matching to the size of an optimal vertex cover?
+What probability does a random partition place an edge in the cut for the Maximum Cut problem?
+What approximation ratio does the randomized Maximum Cut algorithm achieve?
+What probability does a random assignment satisfy a clause in MAXSAT?
+What three properties must be shown to prove a loop invariant?
+In insertion sort, which subarray is guaranteed to be sorted at the start of each iteration?
+What condition on pre(v) and post(v) defines a vertex as "active" in DFS?
+What four types of edges are identified in depth-first search?
+According to the Parentheses Theorem, what interval relationship characterizes a back edge?
+What is the time complexity of checking whether an edge exists using an adjacency matrix?
+What is the time complexity of listing all outgoing edges of a vertex in an adjacency list?
+Under what condition are adjacency matrices preferred over adjacency lists?
+What constraint must flows satisfy at every non-source and non-sink vertex?
+How is the value of a flow defined in a flow network?
+What is an augmenting path in the context of the Ford–Fulkerson algorithm?
+What determines the bottleneck value when augmenting a flow?
+What are the three defining properties of a metric used in Metric TSP?
+Why do "shortcuts" not increase the cost of a tour in Metric TSP?
+What data structure replaces recursive calls in dynamic programming for Fibonacci numbers?
+What is the time complexity of the dynamic programming Fibonacci algorithm shown?
+What are the three components listed for designing a backtracking algorithm?
+What algorithm design technique fills a table iteratively instead of using recursion?
+
+# Intentionally Unanswerable Questions
+# These questions should receive "I don't know." responses (not in course materials)
+What is the approximation ratio of Christofides' algorithm for Metric TSP?
+What is the amortized time complexity of the Edmonds–Karp algorithm?
+What is the worst-case time complexity of DFS using adjacency maps?
+What specific textbook theorem proves NP-completeness of Vertex Cover?
+What optimization heuristic is recommended for choosing augmenting paths?
+What is the expected runtime of Ford–Fulkerson with irrational capacities?
+
+# Answerable Questions (from Course Materials - CSC 805 Data Visualization)
+# These questions should be answerable based on uploaded course materials
+How is perception defined in the context of perception and cognition?
+How is cognition defined in the course materials?
+What are the three main aims of visual representations listed in the slides?
+Which of the aims of visual representation is stated to be specific to visualization and not other representations?
+What are two advantages of visual representations mentioned related to understanding data features?
+What are the four main stages listed in the visualization process?
+What is meant by preattentive processing in visualization?
+According to the slides, what are visual variables used for in visualization design?
+What are the seven key challenges with visualizing data listed in Chapter 3?
+In the context of empowerment, what is the primary reason cited for why people buy visual analytics software?
+What is confirmatory visualization used for?
+What is exploratory visualization used for?
+According to the slides, why is "the question at hand" considered critical in visualization design?
+What are the seven representation methods for data types proposed by Shneiderman?
+What distinguishes one-dimensional data from two-dimensional data in visualization?
+What type of data is characterized by start and finish times?
+What is an example use case mentioned for temporal data?
+What is the primary goal when dealing with large amounts of data, according to the slides?
+What are the five main stages shown in the information extraction pipeline diagram?
+What additional stages are added in the interactive information visualization pipeline compared to information extraction?
+What is the defining characteristic of tree (hierarchical) data?
+In graph visualization, what do nodes represent?
+In graph visualization, what do edges represent?
+What is one key difference between graph drawing and graph visualization mentioned in the slides?
+
+# Intentionally Unanswerable Questions (CSC 805)
+# These questions should receive "I don't know." responses (not in course materials)
+What is the recommended color map for visualizing high-dimensional biomedical data?
+What quantitative metric is used to evaluate visualization effectiveness in this course?
+What algorithm is proposed for automatically optimizing node placement in large graphs?
+What is the maximum number of nodes recommended for interactive graph visualization?
+What specific user study results are cited to validate the visualization pipeline?
+What programming library is mandated for implementing visualizations in this course?

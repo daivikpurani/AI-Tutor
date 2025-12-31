@@ -37,10 +37,26 @@ async def load_course_materials():
     # Supported file extensions
     supported_extensions = {'.pdf', '.txt', '.md', '.docx', '.doc'}
     
-    # Find all supported files recursively
+    # Directories to include (only course materials, exclude papers)
+    include_dirs = ['courses', 'textbooks', 'notes', 'lectures']
+    
+    # Find all supported files recursively, but only from course material directories
     files_to_process = []
     for ext in supported_extensions:
-        files_to_process.extend(materials_dir.rglob(f"*{ext}"))
+        for include_dir in include_dirs:
+            dir_path = materials_dir / include_dir
+            if dir_path.exists():
+                files_to_process.extend(dir_path.rglob(f"*{ext}"))
+    
+    # Also check root of materials_dir for any course files (but exclude papers)
+    for ext in supported_extensions:
+        for file_path in materials_dir.glob(f"*{ext}"):
+            if 'papers' not in str(file_path):
+                files_to_process.append(file_path)
+    
+    # Remove duplicates and filter out any files in papers directory
+    files_to_process = list(set(files_to_process))
+    files_to_process = [f for f in files_to_process if 'papers' not in str(f)]
     
     if not files_to_process:
         print("No supported files found in course_materials directory")

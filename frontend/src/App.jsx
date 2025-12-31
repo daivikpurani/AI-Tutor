@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 import Docs from './Docs';
-import MarkdownRenderer from './components/MarkdownRenderer';
 import ChatBubble from './components/ChatBubble';
 import TypingIndicator from './components/TypingIndicator';
 
@@ -160,6 +159,17 @@ function App() {
   }, []);
 
   const connectWebSocket = () => {
+    // Clear any existing reconnect timeout to prevent multiple retries
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    // Don't try to reconnect if we already have an active connection
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      return;
+    }
+
     try {
       const ws = new WebSocket('ws://localhost:8000/ws/chat');
       wsRef.current = ws;
@@ -167,6 +177,11 @@ function App() {
       ws.onopen = () => {
         console.log('WebSocket connected');
         setConnectionStatus('connected');
+        // Clear any pending reconnect timeout since we're now connected
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = null;
+        }
       };
 
       ws.onmessage = (event) => {
@@ -184,23 +199,32 @@ function App() {
         setIsLoading(false);
         setCurrentStreamingMessage('');
         setStatusMessage('');
-        // Attempt to reconnect after 3 seconds
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connectWebSocket();
-        }, 3000);
+        
+        // Only schedule retry if one isn't already scheduled
+        if (!reconnectTimeoutRef.current) {
+          reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectTimeoutRef.current = null;
+            connectWebSocket();
+          }, 3000);
+        }
       };
 
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
-        setConnectionStatus('error');
-        setIsLoading(false);
-        setCurrentStreamingMessage('');
-        setStatusMessage('');
+        // Don't set status here - let onclose handle it
+        // onclose will always fire after onerror, so we handle status there
       };
 
     } catch (error) {
       console.error('Failed to connect WebSocket:', error);
       setConnectionStatus('error');
+      // Schedule retry even on exception
+      if (!reconnectTimeoutRef.current) {
+        reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = null;
+          connectWebSocket();
+        }, 3000);
+      }
     }
   };
 
@@ -494,9 +518,7 @@ function App() {
             <div className="message bot-message streaming-message">
               <div className="message-content">
                 <div className="message-text">
-                  <MarkdownRenderer>
-                    {currentStreamingMessage}
-                  </MarkdownRenderer>
+                  {currentStreamingMessage}
                   <span className="streaming-cursor">|</span>
                 </div>
               </div>

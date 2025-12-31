@@ -3,14 +3,26 @@ Ai-Tutor FastAPI Backend
 Main application entry point with all API routes and WebSocket support.
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
+import os
+import sys
+import logging
+from pathlib import Path
+
+# Add the script's directory to Python path to ensure imports work
+script_dir = Path(__file__).parent.absolute()
+if str(script_dir) not in sys.path:
+    sys.path.insert(0, str(script_dir))
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form, Request
+from fastapi.datastructures import FormData
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
-import os
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 import json
+
+logger = logging.getLogger(__name__)
 
 from services.query_handler import QueryHandler
 from services.document_chunker import DocumentChunker
@@ -18,7 +30,7 @@ from services.vector_db import VectorDatabase
 from services.benchmark_config import BenchmarkConfig
 from services.llm_service import HybridLLMService, LLMProvider
 from services.relevance_scorer import RelevanceScorer
-from models.schemas import ChatRequest, ChatResponse, UploadResponse, HealthResponse
+from models.schemas import ChatRequest, ChatResponse, UploadResponse, HealthResponse, SearchRequest, SearchResponse, MultipleUploadResponse, FileUploadResult
 from utils.config import settings
 
 # Initialize FastAPI app
@@ -41,7 +53,10 @@ app.add_middleware(
 
 # Initialize services
 query_handler = QueryHandler()
-document_chunker = DocumentChunker()
+document_chunker = DocumentChunker(
+    chunk_size=settings.chunk_size,
+    chunk_overlap=settings.chunk_overlap
+)
 vector_db = VectorDatabase()
 
 # WebSocket connection manager
@@ -132,36 +147,153 @@ async def chat_benchmark_endpoint(request: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing benchmark query: {str(e)}")
 
-@app.post("/api/upload", response_model=UploadResponse)
-async def upload_file(file: UploadFile = File(...)):
-    """Upload and process documents for vector database."""
-    try:
-        # Save uploaded file temporarily
-        file_path = f"temp_uploads/{file.filename}"
-        os.makedirs("temp_uploads", exist_ok=True)
-        
-        with open(file_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
-        
-        # Chunk the document
-        chunks = document_chunker.chunk_file(file_path)
-        
-        # Store chunks in vector database
-        await vector_db.add_documents(chunks, file.filename)
-        
-        # Clean up temporary file
-        os.remove(file_path)
-        
-        return UploadResponse(
-            message=f"Successfully processed {file.filename}",
-            filename=file.filename,
-            chunks_created=len(chunks),
-            status="success"
-        )
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+@app.post("/api/upload")
+async def upload_file(request: Request):
+    """
+    Upload and process one or multiple documents for vector database.
+    
+    - Single file: Use field name 'file' (backward compatible) or 'files' with one file
+      Returns UploadResponse
+    - Multiple files: Use field name 'files' with multiple files (send multiple form fields with same name)
+      Returns MultipleUploadResponse with per-file results
+    
+    Individual file failures don't stop the entire batch when uploading multiple files.
+    """
+    # Parse form data manually to handle both single and multiple files
+    form = await request.form()
+    
+    files_list = []
+    
+    # Check for 'file' field (single file, backward compatible)
+    if 'file' in form:
+        file = form['file']
+        if isinstance(file, UploadFile):
+            files_list = [file]
+    
+    # Check for 'files' field (can be single or multiple)
+    # FastAPI/Starlette FormData stores multiple values with same key in _list
+    if 'files' in form:
+        # Try to get all files with 'files' field name
+        # FormData._list contains all form entries as tuples (key, value)
+        if hasattr(form, '_list'):
+            # Get all entries with key 'files'
+            all_files = [item[1] for item in form._list if item[0] == 'files' and isinstance(item[1], UploadFile)]
+            if all_files:
+                files_list = all_files
+            else:
+                # Fallback: single file
+                files_field = form.get('files')
+                if isinstance(files_field, UploadFile):
+                    files_list = [files_field]
+        else:
+            # Fallback if _list doesn't exist
+            files_field = form.get('files')
+            if isinstance(files_field, UploadFile):
+                files_list = [files_field]
+    
+    if not files_list:
+        raise HTTPException(status_code=400, detail="No files provided. Use 'file' for single upload or 'files' for multiple uploads.")
+    
+    files = files_list
+    
+    # Single file upload - return simple response for backward compatibility
+    if len(files) == 1:
+        file = files[0]
+        file_path = None
+        try:
+            # Save uploaded file temporarily
+            file_path = f"temp_uploads/{file.filename}"
+            os.makedirs("temp_uploads", exist_ok=True)
+            
+            with open(file_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+            
+            # Chunk the document
+            chunks = document_chunker.chunk_file(file_path)
+            
+            # Store chunks in vector database
+            await vector_db.add_documents(chunks, file.filename)
+            
+            # Clean up temporary file
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            
+            return UploadResponse(
+                message=f"Successfully processed {file.filename}",
+                filename=file.filename,
+                chunks_created=len(chunks),
+                status="success"
+            )
+            
+        except Exception as e:
+            # Clean up temporary file if it exists
+            if file_path and os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except:
+                    pass
+            raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    
+    # Multiple files upload - return detailed response
+    results = []
+    successful = 0
+    failed = 0
+    
+    for file in files:
+        file_path = None
+        try:
+            # Save uploaded file temporarily
+            file_path = f"temp_uploads/{file.filename}"
+            os.makedirs("temp_uploads", exist_ok=True)
+            
+            with open(file_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+            
+            # Chunk the document
+            chunks = document_chunker.chunk_file(file_path)
+            
+            # Store chunks in vector database
+            await vector_db.add_documents(chunks, file.filename)
+            
+            # Clean up temporary file
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            
+            results.append(FileUploadResult(
+                filename=file.filename,
+                chunks_created=len(chunks),
+                status="success"
+            ))
+            successful += 1
+            logger.info(f"Successfully processed {file.filename}: {len(chunks)} chunks")
+            
+        except Exception as e:
+            # Clean up temporary file if it exists
+            if file_path and os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except:
+                    pass
+            
+            error_msg = str(e)
+            results.append(FileUploadResult(
+                filename=file.filename,
+                chunks_created=0,
+                status="error",
+                error=error_msg
+            ))
+            failed += 1
+            logger.error(f"Failed to process {file.filename}: {error_msg}")
+    
+    return MultipleUploadResponse(
+        message=f"Processed {len(files)} files: {successful} successful, {failed} failed",
+        total_files=len(files),
+        successful=successful,
+        failed=failed,
+        results=results
+    )
 
 @app.post("/api/upload-direct")
 async def upload_document_direct(
@@ -284,6 +416,41 @@ async def get_database_stats():
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting database stats: {str(e)}")
+
+@app.post("/api/search", response_model=SearchResponse)
+async def search_documents(request: SearchRequest):
+    """
+    Search for document chunks related to a query.
+    Returns raw chunks with metadata, distance scores, and text content.
+    This endpoint returns the actual chunks without LLM processing.
+    """
+    try:
+        # Search for similar chunks using vector similarity search
+        chunks = await vector_db.search_similar(
+            query=request.query,
+            n_results=request.n_results,
+            filter_metadata=request.filter_metadata
+        )
+        
+        # Format chunks for response
+        results = []
+        for chunk in chunks:
+            results.append({
+                "text": chunk.get("text", ""),
+                "metadata": chunk.get("metadata", {}),
+                "id": chunk.get("id"),
+                "distance": chunk.get("distance")
+            })
+        
+        return SearchResponse(
+            results=results,
+            query=request.query,
+            total_results=len(results),
+            timestamp=datetime.now().isoformat()
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error searching documents: {str(e)}")
 
 @app.get("/api/test-db")
 async def test_database_connection():

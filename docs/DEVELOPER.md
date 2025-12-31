@@ -325,8 +325,6 @@ npm run test:backend     # Run backend tests
 npm run test:frontend    # Run frontend tests
 npm run setup            # Install all dependencies
 npm run python:test      # Run Python tests
-npm run python:chunker  # Test document chunker
-npm run python:query     # Test query handler
 npm run clean            # Remove all node_modules
 npm run fresh-install   # Clean and reinstall everything
 ```

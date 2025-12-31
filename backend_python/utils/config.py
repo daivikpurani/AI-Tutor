@@ -36,11 +36,12 @@ class Settings(BaseSettings):
     # Ollama Configuration
     ollama_base_url: str = "http://localhost:11434"
     # Primary local model
-    ollama_default_model: str = "llama3.1:8b-instruct"
+    ollama_default_model: str = "llama3.3:latest"
     
     # Document Processing
-    chunk_size: int = 1000
-    chunk_overlap: int = 200
+    # Optimized for academic papers and PDF slides/decks
+    chunk_size: int = 1500  # Larger chunks for better context (papers: 1500-2000, slides: 1200-1500)
+    chunk_overlap: int = 250  # ~15-20% overlap for context preservation
     max_file_size: int = 10 * 1024 * 1024  # 10MB
     
     # Vector Search Configuration
@@ -66,7 +67,7 @@ class Settings(BaseSettings):
     exploration_temperature: float = 0.7
 
     # Model Registry (explicit for clarity and future extensions)
-    model_registry_ollama_default: str = "llama3.1:8b-instruct"
+    model_registry_ollama_default: str = "llama3.3:latest"
     model_registry_openai_default: str = "gpt-4o-mini"
     model_registry_openai_premium: str = "gpt-4o"
     

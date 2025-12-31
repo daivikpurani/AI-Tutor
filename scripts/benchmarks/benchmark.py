@@ -16,6 +16,14 @@ from typing import List, Dict, Any
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../backend_python'))
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    env_path = os.path.join(os.path.dirname(__file__), '../../backend_python/.env')
+    load_dotenv(env_path)
+except ImportError:
+    pass  # dotenv not available, skip
+
 # Add scripts/benchmarks to path for test_prompts
 benchmarks_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, benchmarks_dir)
