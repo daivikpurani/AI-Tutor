@@ -50,9 +50,55 @@ echo "Virtual environment: $VENV_NAME"
 echo ""
 
 # Remove old venv if it exists
+# Safety checks to prevent accidental deletion of wrong directories
 if [ -d "$PROJECT_ROOT/$VENV_NAME" ]; then
     echo -e "${YELLOW}Removing existing virtual environment...${NC}"
-    rm -rf "$PROJECT_ROOT/$VENV_NAME"
+    
+    # Validate variables are non-empty
+    if [ -z "${PROJECT_ROOT}" ]; then
+        echo -e "${RED}✗ Error: PROJECT_ROOT is empty${NC}"
+        exit 1
+    fi
+    
+    if [ -z "${VENV_NAME}" ]; then
+        echo -e "${RED}✗ Error: VENV_NAME is empty${NC}"
+        exit 1
+    fi
+    
+    # Construct target path
+    TARGET="$PROJECT_ROOT/$VENV_NAME"
+    
+    # Resolve paths to absolute, canonical paths
+    RESOLVED_TARGET=$(realpath "$TARGET" 2>/dev/null || echo "")
+    RESOLVED_PROJECT_ROOT=$(realpath "$PROJECT_ROOT" 2>/dev/null || echo "")
+    
+    # Verify resolved paths are valid
+    if [ -z "$RESOLVED_TARGET" ] || [ -z "$RESOLVED_PROJECT_ROOT" ]; then
+        echo -e "${RED}✗ Error: Failed to resolve paths${NC}"
+        exit 1
+    fi
+    
+    # Safety check: prevent deletion of root filesystem
+    if [ "$RESOLVED_TARGET" = "/" ]; then
+        echo -e "${RED}✗ Error: Attempted to delete root filesystem (/)${NC}"
+        exit 1
+    fi
+    
+    # Safety check: ensure target is within project root (prevent directory traversal)
+    case "$RESOLVED_TARGET" in
+        "$RESOLVED_PROJECT_ROOT"/*)
+            # Target is within project root, safe to proceed
+            ;;
+        *)
+            echo -e "${RED}✗ Error: Target path escapes project root${NC}"
+            echo "  Target: $RESOLVED_TARGET"
+            echo "  Project root: $RESOLVED_PROJECT_ROOT"
+            exit 1
+            ;;
+    esac
+    
+    # All safety checks passed, safe to remove
+    rm -rf "$RESOLVED_TARGET"
 fi
 
 # Create new virtual environment

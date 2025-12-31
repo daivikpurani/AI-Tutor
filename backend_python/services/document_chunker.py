@@ -63,18 +63,45 @@ class DocumentChunker:
             # Intelligent boundary detection (only if we haven't reached end of text)
             if end < len(text):
                 chunk_ratio = (end - start) / self.chunk_size
+                original_end = end
                 
-                # Priority 1: Try paragraph breaks (double newline) - best for semantic coherence
-                # Only use if chunk is >70% of target size (avoid tiny chunks)
-                if chunk_ratio > 0.7:
-                    para_break = text.rfind('\n\n', start, end)
-                    if para_break > start + (self.chunk_size * 0.7):
-                        end = para_break + 2
-                        logger.debug(f"Chunk {chunk_id}: Split at paragraph break at position {end}")
+                # Check higher thresholds first to ensure they are reachable
+                # Priority 3: Smart sentence detection (only in last 100 chars)
+                # Only use if chunk is >90% of target size (highest threshold, checked first)
+                if chunk_ratio > 0.9:
+                    search_start = max(start, end - 100)
+                    
+                    # Look for period followed by space (real sentence end)
+                    # This avoids breaking on single-character abbreviations like "a." or "1."
+                    sentence_end = text.rfind('. ', search_start, end)
+                    while sentence_end > start and sentence_end > search_start:
+                        # Verify it's not a single-character abbreviation
+                        if sentence_end > 0:
+                            char_before = text[sentence_end - 1]
+                            # Only consider alphanumeric characters (most sentence endings)
+                            if char_before in '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ':
+                                # Scan backwards to find the start of the token
+                                token_start = sentence_end - 1
+                                while token_start > start and text[token_start] not in ' \t\n\r':
+                                    token_start -= 1
+                                # token_start now points to whitespace or start, so token starts at token_start + 1
+                                token_start += 1
+                                # Calculate token length
+                                token_length = sentence_end - token_start
+                                
+                                # Only split if token length > 1 (avoid single-char abbreviations)
+                                if token_length > 1:
+                                    end = sentence_end + 2
+                                    logger.debug(f"Chunk {chunk_id}: Split at sentence boundary at position {end}")
+                                    break
+                        
+                        # If this sentence_end didn't work, search for the previous one
+                        sentence_end = text.rfind('. ', search_start, sentence_end)
                 
                 # Priority 2: Try section markers (headers, numbered sections)
                 # Look for section patterns in last 300 characters
-                elif chunk_ratio > 0.8:
+                # Only check if chunk is >80% and we haven't found a boundary yet
+                if chunk_ratio > 0.8 and end == original_end:
                     search_start = max(start, end - 300)
                     search_text = text[search_start:end]
                     
@@ -90,23 +117,13 @@ class DocumentChunker:
                             end = search_start + section_pattern.start() + 1
                             logger.debug(f"Chunk {chunk_id}: Split at numbered section at position {end}")
                 
-                # Priority 3: Smart sentence detection (only in last 100 chars)
-                # Only use if chunk is >90% of target size
-                elif chunk_ratio > 0.9:
-                    search_start = max(start, end - 100)
-                    
-                    # Look for period followed by space (real sentence end)
-                    # This avoids breaking on formatting periods like "§", "1.", "a."
-                    sentence_end = text.rfind('. ', search_start, end)
-                    if sentence_end > start and sentence_end > search_start:
-                        # Verify it's not a formatting period
-                        # Check if there's a single char/number/special char before the period
-                        if sentence_end > 0:
-                            char_before = text[sentence_end - 1]
-                            # Only break if it's a real sentence (not single char/number/special)
-                            if char_before not in '0123456789§abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ':
-                                end = sentence_end + 2
-                                logger.debug(f"Chunk {chunk_id}: Split at sentence boundary at position {end}")
+                # Priority 1: Try paragraph breaks (double newline) - best for semantic coherence
+                # Only use if chunk is >70% and we haven't found a boundary yet
+                if chunk_ratio > 0.7 and end == original_end:
+                    para_break = text.rfind('\n\n', start, end)
+                    if para_break > start + (self.chunk_size * 0.7):
+                        end = para_break + 2
+                        logger.debug(f"Chunk {chunk_id}: Split at paragraph break at position {end}")
             
             chunk_text = text[start:end].strip()
             

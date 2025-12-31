@@ -34,7 +34,6 @@
   "author": "Ai-Tutor Research Team",
   "license": "UNLICENSED",
   "devDependencies": {
-    "baseline-browser-mapping": "^2.9.0",
     "concurrently": "^8.2.2"
   },
   "engines": {

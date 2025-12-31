@@ -172,13 +172,95 @@ class QueryHandler:
             List of relevant context chunks
         """
         try:
+            # #region agent log
+            import json
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A",
+                "location": "query_handler.py:_get_relevant_context:175",
+                "message": "Vector DB retrieval - query and n_results",
+                "data": {"query": query, "n_results": n_results},
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+            # #endregion
+            
             context_chunks = await self.vector_db.search_similar(query, n_results)
             
-            # Filter out low-relevance chunks (distance > 2.0 for ChromaDB)
+            # #region agent log
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A",
+                "location": "query_handler.py:_get_relevant_context:180",
+                "message": "Vector DB retrieval - raw chunks before filtering",
+                "data": {
+                    "chunk_count": len(context_chunks),
+                    "chunks": [
+                        {
+                            "text_preview": chunk.get('text', '')[:200] if chunk.get('text') else '',
+                            "distance": chunk.get('distance'),
+                            "filename": chunk.get('metadata', {}).get('filename', 'unknown') if isinstance(chunk, dict) else 'unknown'
+                        }
+                        for chunk in context_chunks[:5]
+                    ]
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+            # #endregion
+            
+            # Filter out low-relevance chunks
+            # For cosine distance: 0 = identical, 1 = orthogonal, 2 = opposite
+            # Use very strict threshold: distance < 1.0 (similarity > 0.5)
+            # This only keeps chunks that are at least 50% similar
             filtered_chunks = [
                 chunk for chunk in context_chunks 
-                if chunk.get('distance', 1.0) < 2.0
+                if chunk.get('distance', 2.0) < 1.0
             ]
+            
+            # Additional check: If all chunks have poor similarity (distance > 0.8), return empty
+            # This prevents showing irrelevant context that confuses the LLM
+            if filtered_chunks:
+                min_distance = min(chunk.get('distance', 2.0) for chunk in filtered_chunks)
+                avg_distance = sum(chunk.get('distance', 2.0) for chunk in filtered_chunks) / len(filtered_chunks)
+                # If minimum distance is high OR average distance is high, likely irrelevant
+                if min_distance > 0.8 or avg_distance > 0.9:  # Poor similarity
+                    logger.warning(f"Retrieved chunks have poor similarity (min: {min_distance:.2f}, avg: {avg_distance:.2f}), returning empty context")
+                    filtered_chunks = []
+            elif context_chunks:
+                # Even if nothing passed the strict filter, check if raw results are too poor
+                min_distance = min(chunk.get('distance', 2.0) for chunk in context_chunks)
+                if min_distance > 1.0:  # Very poor - definitely irrelevant
+                    logger.warning(f"All raw chunks have very poor similarity (min distance: {min_distance:.2f}), returning empty context")
+                    filtered_chunks = []
+            
+            # #region agent log
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A",
+                "location": "query_handler.py:_get_relevant_context:200",
+                "message": "Vector DB retrieval - filtered chunks after distance filter",
+                "data": {
+                    "filtered_count": len(filtered_chunks),
+                    "filtered_chunks": [
+                        {
+                            "text_preview": chunk.get('text', '')[:200] if chunk.get('text') else '',
+                            "distance": chunk.get('distance'),
+                            "filename": chunk.get('metadata', {}).get('filename', 'unknown') if isinstance(chunk, dict) else 'unknown'
+                        }
+                        for chunk in filtered_chunks[:5]
+                    ]
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+            # #endregion
             
             logger.info(f"Retrieved {len(filtered_chunks)} relevant context chunks")
             return filtered_chunks
@@ -197,14 +279,43 @@ class QueryHandler:
         Returns:
             Dictionary with retrieval quality metrics
         """
+        # #region agent log
+        import json
+        log_entry = {
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "B",
+            "location": "query_handler.py:_assess_retrieval_quality:190",
+            "message": "Retrieval quality assessment - input chunks",
+            "data": {"chunk_count": len(context_chunks) if context_chunks else 0},
+            "timestamp": int(datetime.now().timestamp() * 1000)
+        }
+        with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
+        # #endregion
+        
         if not context_chunks:
-            return {
+            result = {
                 'chunk_count': 0,
                 'avg_similarity': 0.0,
                 'avg_distance': float('inf'),
                 'has_good_retrieval': False,
                 'quality_level': 'none'
             }
+            # #region agent log
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "B",
+                "location": "query_handler.py:_assess_retrieval_quality:207",
+                "message": "Retrieval quality assessment - result (no chunks)",
+                "data": result,
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+            # #endregion
+            return result
         
         # Extract distances and calculate similarities
         distances = []
@@ -239,7 +350,7 @@ class QueryHandler:
         else:
             quality_level = 'poor'
         
-        return {
+        result = {
             'chunk_count': len(context_chunks),
             'avg_similarity': avg_similarity,
             'avg_distance': avg_distance,
@@ -248,6 +359,22 @@ class QueryHandler:
             'min_distance': min(distances) if distances else float('inf'),
             'max_distance': max(distances) if distances else float('inf')
         }
+        
+        # #region agent log
+        log_entry = {
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "B",
+            "location": "query_handler.py:_assess_retrieval_quality:250",
+            "message": "Retrieval quality assessment - result",
+            "data": result,
+            "timestamp": int(datetime.now().timestamp() * 1000)
+        }
+        with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
+        # #endregion
+        
+        return result
     
     async def _generate_llm_response(
         self, 
@@ -286,6 +413,25 @@ class QueryHandler:
                 retrieval_quality=retrieval_quality
             )
             
+            # #region agent log
+            import json
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "C",
+                "location": "query_handler.py:_generate_llm_response:287",
+                "message": "Prompt creation - prompt sent to LLM",
+                "data": {
+                    "prompt_preview": prompt[:1000] + ("..." if len(prompt) > 1000 else ""),
+                    "prompt_length": len(prompt),
+                    "query": query
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+            # #endregion
+            
             # Prepare messages for LLM
             system_prompt = (
                 self.prompt_templates.SYSTEM_ASSESSMENT if mode == "assessment" else self.prompt_templates.SYSTEM_EXPLORATION
@@ -295,6 +441,24 @@ class QueryHandler:
                 {"role": "user", "content": prompt}
             ]
             
+            # #region agent log
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "C",
+                "location": "query_handler.py:_generate_llm_response:296",
+                "message": "LLM request - messages being sent",
+                "data": {
+                    "system_prompt_preview": system_prompt[:500] + ("..." if len(system_prompt) > 500 else ""),
+                    "user_prompt_preview": prompt[:500] + ("..." if len(prompt) > 500 else ""),
+                    "mode": mode
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+            # #endregion
+            
             # Use hybrid LLM service
             response = await self.llm_service.generate_response(
                 messages=messages,
@@ -303,6 +467,26 @@ class QueryHandler:
                 temperature=(settings.assessment_temperature if mode == 'assessment' else settings.exploration_temperature),
                 mode=mode
             )
+            
+            # #region agent log
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "C",
+                "location": "query_handler.py:_generate_llm_response:308",
+                "message": "LLM response - raw response from LLM",
+                "data": {
+                    "response_content": response.content,
+                    "response_length": len(response.content),
+                    "provider": response.provider.value,
+                    "model": response.model,
+                    "metadata": response.metadata
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+            # #endregion
             
             logger.info(f"Generated response using {response.provider.value} provider")
             return response.content.strip()
@@ -343,6 +527,21 @@ class QueryHandler:
     ) -> Dict[str, Any]:
         """Process a query and return response plus LLM routing metadata for benchmarking."""
         try:
+            # #region agent log
+            import json
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "ALL",
+                "location": "query_handler.py:process_query_with_metadata:337",
+                "message": "Query processing started",
+                "data": {"query": query, "user_id": user_id, "mode": mode},
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+            # #endregion
+            
             await self._ensure_llm_service_initialized()
 
             self._add_to_history(query, 'user', user_id)
@@ -364,10 +563,48 @@ class QueryHandler:
                 retrieval_quality=retrieval_quality
             )
 
+            # #region agent log
+            import json
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "C",
+                "location": "query_handler.py:process_query_with_metadata:539",
+                "message": "Prompt creation (metadata path) - prompt sent to LLM",
+                "data": {
+                    "prompt_preview": prompt[:1000] + ("..." if len(prompt) > 1000 else ""),
+                    "prompt_length": len(prompt),
+                    "query": query,
+                    "context_preview": context_text[:500] + ("..." if len(context_text) > 500 else "")
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+            # #endregion
+
             messages = [
                 {"role": "system", "content": self.prompt_templates.SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
             ]
+
+            # #region agent log
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "C",
+                "location": "query_handler.py:process_query_with_metadata:560",
+                "message": "LLM request (metadata path) - messages being sent",
+                "data": {
+                    "system_prompt_preview": self.prompt_templates.SYSTEM_PROMPT[:500] + ("..." if len(self.prompt_templates.SYSTEM_PROMPT) > 500 else ""),
+                    "user_prompt_preview": prompt[:500] + ("..." if len(prompt) > 500 else ""),
+                    "mode": mode
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+            # #endregion
 
             response = await self.llm_service.generate_response(
                 messages=messages,
@@ -375,6 +612,26 @@ class QueryHandler:
                 max_tokens=1000,
                 temperature=0.7
             )
+
+            # #region agent log
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "C",
+                "location": "query_handler.py:process_query_with_metadata:577",
+                "message": "LLM response (metadata path) - raw response from LLM",
+                "data": {
+                    "response_content": response.content,
+                    "response_length": len(response.content),
+                    "provider": response.provider.value,
+                    "model": response.model,
+                    "metadata": response.metadata
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+            # #endregion
 
             self._add_to_history(response.content, 'assistant', user_id)
 
@@ -431,8 +688,37 @@ class QueryHandler:
     
     def _build_context_text(self, context_chunks: List[Dict]) -> str:
         """Build context text from retrieved chunks."""
+        # #region agent log
+        import json
+        log_entry = {
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "D",
+            "location": "query_handler.py:_build_context_text:432",
+            "message": "Context building - input chunks",
+            "data": {"chunk_count": len(context_chunks) if context_chunks else 0},
+            "timestamp": int(datetime.now().timestamp() * 1000)
+        }
+        with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
+        # #endregion
+        
         if not context_chunks:
-            return "No relevant context found in the uploaded documents."
+            result = "No relevant context found in the uploaded documents."
+            # #region agent log
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "D",
+                "location": "query_handler.py:_build_context_text:436",
+                "message": "Context building - result (no chunks)",
+                "data": {"context_text": result, "context_length": len(result)},
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+            # #endregion
+            return result
         
         context_parts = []
         for i, chunk in enumerate(context_chunks, 1):
@@ -440,7 +726,27 @@ class QueryHandler:
             text = chunk.get('text', '')
             context_parts.append(f"Context {i} (from {source}):\n{text}")
         
-        return "\n\n".join(context_parts)
+        result = "\n\n".join(context_parts)
+        
+        # #region agent log
+        log_entry = {
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "D",
+            "location": "query_handler.py:_build_context_text:443",
+            "message": "Context building - result",
+            "data": {
+                "context_text": result[:1000] + ("..." if len(result) > 1000 else ""),
+                "context_length": len(result),
+                "full_context_preview": result[:500]
+            },
+            "timestamp": int(datetime.now().timestamp() * 1000)
+        }
+        with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
+        # #endregion
+        
+        return result
     
     def _build_conversation_history(self, conversation_history: List[Dict]) -> str:
         """Build conversation history text limited to the last 8 exchanges."""

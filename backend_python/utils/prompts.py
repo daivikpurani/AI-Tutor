@@ -8,38 +8,35 @@ class PromptTemplates:
 
     SYSTEM_PROMPT = """You are a supportive academic tutor focused on helping students learn deeply using the uploaded course materials.
 
-CRITICAL: Answerability Evaluation
-Before answering, use this decision framework:
+CRITICAL RULE #1: Answerability Check (MOST IMPORTANT)
+BEFORE generating any response, evaluate if the provided context actually answers the question.
 
-Step 1: Evaluate Context Quality
-✓ Check if retrieved context directly addresses the question
-✓ Assess relevance and completeness
-✓ Review retrieval quality (similarity > 0.7, distance < 1.5)
+ONLY answer if ALL of these are true:
+✓ The context directly and clearly addresses the specific question asked
+✓ The context contains factual information (not vague references or unrelated content)
+✓ You can cite specific sources from the uploaded documents
+✓ The context makes sense and is coherent
 
-Step 2: Determine Answerability
-ONLY answer if:
-✓ Context contains specific, relevant info directly addressing the question
-✓ You can cite sources from the uploaded documents
-✓ Retrieval quality is sufficient
+Say EXACTLY "I don't know." (and NOTHING else) if ANY of these are true:
+✗ No context was provided
+✗ The context doesn't address the question
+✗ The context is confusing, incoherent, or appears to be about unrelated topics
+✗ The context only partially answers the question (you'd need to guess or speculate)
+✗ You cannot understand what the context is about
+✗ The context mentions topics that seem unrelated to the question
 
-Say "I don't know." (and nothing else) IF ANY of the following are true:
-✗ No relevant context retrieved  
-✗ Context is too vague or only partially answers the question  
-✗ You'd need to speculate beyond the documents  
-✗ Retrieval quality is poor (similarity < 0.6 or distance > 1.8)
-✗ You cannot understand or make sense of the retrieved chunks
+CRITICAL: If the context appears to be about completely different topics (e.g., the question is about "RAGs" but context mentions "Microsoft", "HR practices", "TensorFlow", or other unrelated topics), you MUST say "I don't know." Do NOT try to connect unrelated topics or create a response from unrelated context.
 
-NEVER fabricate, speculate, or add background information when you don't know. Simply say "I don't know."
+CRITICAL: NEVER fabricate information. NEVER use your training data to answer when the context doesn't support it. NEVER create examples or explanations that aren't in the provided context. If you don't have relevant context, say EXACTLY "I don't know." and nothing else.
 
 Core Learning Principles:
-1. Use ONLY retrieved documents - answer based on what's in the uploaded course materials
-2. If you have relevant context, provide a clear, direct answer with citations
-3. If you don't have relevant context or can't understand it, say "I don't know." (no background, no elaboration)
-4. Tone: Warm, conversational, and concise
-5. Citations: Always use [source: filename | section/page] after key claims
+1. Use ONLY the retrieved context - do NOT use your training data if context is missing or irrelevant
+2. If context is relevant: Provide a clear answer with citations [source: filename|section]
+3. If context is irrelevant or missing: Say EXACTLY "I don't know." (nothing else - no explanations, no background, no suggestions)
+4. Tone: Warm but factual - only when you have the answer
 
-When you have the answer: Provide it clearly with citations and end with an engaging follow-up question.
-When you don't have the answer: Simply say "I don't know."
+When you have the answer: Provide it clearly with citations.
+When you don't have the answer: Say EXACTLY "I don't know." (nothing else).
 """
 
     SYSTEM_EXPLORATION = """You are an academic tutor helping students learn using uploaded course materials.
@@ -138,10 +135,41 @@ Never speculate, fabricate, or add background information when context doesn't s
         # Section 3: Context
         has_context = context and context != "No relevant context found in the uploaded documents."
         
-        if has_context:
+        # Use retrieval quality to determine if we should even show context
+        should_use_context = has_context
+        if retrieval_quality:
+            quality_level = retrieval_quality.get('quality_level', 'unknown')
+            has_good_retrieval = retrieval_quality.get('has_good_retrieval', False)
+            avg_similarity = retrieval_quality.get('avg_similarity', 0.0)
+            avg_distance = retrieval_quality.get('avg_distance', float('inf'))
+            chunk_count = retrieval_quality.get('chunk_count', 0)
+            
+            # If retrieval quality is poor OR no chunks retrieved, don't use the context
+            if chunk_count == 0:
+                should_use_context = False
+                prompt_parts.append(
+                    f"\n⚠️ NO CONTEXT RETRIEVED:\n"
+                    f"No relevant documents found in the uploaded materials.\n"
+                    f"DECISION: Respond with exactly 'I don't know.' (nothing else).\n"
+                )
+            elif quality_level == 'poor' or (not has_good_retrieval and avg_similarity < 0.5) or avg_distance > 0.8:
+                should_use_context = False
+                prompt_parts.append(
+                    f"\n⚠️ RETRIEVAL QUALITY WARNING:\n"
+                    f"Retrieval quality is POOR (similarity: {avg_similarity:.2f}, distance: {avg_distance:.2f}, quality: {quality_level}).\n"
+                    f"The retrieved context is likely irrelevant or unreliable.\n"
+                    f"DECISION: Respond with exactly 'I don't know.' (nothing else).\n"
+                    f"Do NOT try to answer using this poor-quality context.\n"
+                )
+        
+        if has_context and should_use_context:
             # Trim context if too long
             trimmed_context = context[:2000] + "\n[... additional context truncated ...]" if len(context) > 2000 else context
             prompt_parts.append(f"Context from course materials:\n{trimmed_context}")
+        elif has_context and not should_use_context:
+            # Context exists but quality is poor - don't show it
+            prompt_parts.append("Context: Retrieved context is of poor quality and likely irrelevant.")
+            prompt_parts.append("Decision: Respond with exactly 'I don't know.' (nothing else).")
         else:
             prompt_parts.append("Context: No relevant context found.")
             prompt_parts.append("Decision: Respond with exactly 'I don't know.' (nothing else).")
@@ -152,6 +180,7 @@ Never speculate, fabricate, or add background information when context doesn't s
             "Decision Rule:\n"
             "- If context directly answers the question → Provide a clear answer with citations [source: filename|section]\n"
             "- If context does NOT answer the question → Say exactly 'I don't know.' (nothing else)\n"
+            "- If retrieval quality is poor → Say exactly 'I don't know.' (nothing else)\n"
             "-"*60
         )
         
