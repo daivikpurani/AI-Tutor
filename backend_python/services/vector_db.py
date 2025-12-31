@@ -75,7 +75,7 @@ class VectorDatabase:
             # Ensure directory exists
             os.makedirs(self.persist_directory, exist_ok=True)
             
-            # ChromaDB 1.3.5+ uses PersistentClient (modern, stable API)
+            # ChromaDB 0.4.18 uses PersistentClient (modern, stable API)
             self.client = chromadb.PersistentClient(path=self.persist_directory)
             logger.info(f"ChromaDB PersistentClient initialized at: {self.persist_directory}")
         except Exception as e:
@@ -116,7 +116,9 @@ class VectorDatabase:
             try:
                 self.collection = self.client.get_collection(name=self.collection_name)
                 logger.info(f"Using existing '{self.collection_name}' collection")
-            except:
+            except ValueError as e:
+                # ValueError is raised by ChromaDB 0.4.18 when collection doesn't exist
+                logger.info(f"Collection '{self.collection_name}' not found: {e}. Creating new collection.")
                 # Collection doesn't exist, create it without embedding function
                 self.collection = self.client.create_collection(
                     name=self.collection_name,
