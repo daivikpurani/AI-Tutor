@@ -164,34 +164,35 @@ async def upload_file(request: Request):
     
     files_list = []
     
-    # Check for 'file' field (single file, backward compatible)
-    if 'file' in form:
-        file = form['file']
-        if isinstance(file, UploadFile):
-            files_list = [file]
+    # Build list of file-like objects: must have .read and .filename (Starlette UploadFile interface)
+    def is_upload_file(obj: Any) -> bool:
+        return (
+            hasattr(obj, "read") and callable(getattr(obj, "read"))
+            and hasattr(obj, "filename") and obj.filename is not None
+        )
     
-    # Check for 'files' field (can be single or multiple)
-    # FastAPI/Starlette FormData stores multiple values with same key in _list
-    if 'files' in form:
-        # Try to get all files with 'files' field name
-        # FormData._list contains all form entries as tuples (key, value)
-        if hasattr(form, '_list'):
-            # Get all entries with key 'files'
-            all_files = [item[1] for item in form._list if item[0] == 'files' and isinstance(item[1], UploadFile)]
-            if all_files:
-                files_list = all_files
-            else:
-                # Fallback: single file
-                files_field = form.get('files')
-                if isinstance(files_field, UploadFile):
-                    files_list = [files_field]
-        else:
-            # Fallback if _list doesn't exist
-            files_field = form.get('files')
-            if isinstance(files_field, UploadFile):
-                files_list = [files_field]
+    # Method 1: Use form._list first (most reliable for multipart; handles curl and requests)
+    if hasattr(form, "_list"):
+        for key, value in form._list:
+            if (key == "file" or key == "files") and is_upload_file(value):
+                files_list.append(value)
+    
+    # Method 2: Fallback - form['file'] or form['files']
+    if not files_list and "file" in form:
+        f = form["file"]
+        if is_upload_file(f):
+            files_list = [f]
+    if not files_list and "files" in form:
+        f = form["files"]
+        if is_upload_file(f):
+            files_list = [f] if not isinstance(f, list) else [x for x in f if is_upload_file(x)]
     
     if not files_list:
+        # Log form structure for debugging
+        logger.warning(f"Form keys: {list(form.keys()) if hasattr(form, 'keys') else 'N/A'}")
+        logger.warning(f"Form has _list: {hasattr(form, '_list')}")
+        if hasattr(form, '_list'):
+            logger.warning(f"Form _list items: {[(k, type(v).__name__ if hasattr(v, '__class__') else str(type(v))) for k, v in form._list]}")
         raise HTTPException(status_code=400, detail="No files provided. Use 'file' for single upload or 'files' for multiple uploads.")
     
     files = files_list

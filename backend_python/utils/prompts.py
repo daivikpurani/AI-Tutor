@@ -122,65 +122,39 @@ Never speculate, fabricate, or add background information when context doesn't s
         # Section 1: Question
         prompt_parts.append(f"Question: {query.strip()}")
         
-        # Section 2: Answerability Check (MOST PROMINENT)
+        # Section 2: Answerability Check (Simplified - trust the reranker)
         prompt_parts.append(
             "\n" + "="*60 + "\n"
-            "CRITICAL: Answerability Check\n"
-            "ONLY answer if the context below directly addresses the question above.\n"
-            "If the context doesn't answer the question, respond with exactly: 'I don't know.'\n"
-            "Do NOT speculate, connect to unrelated topics, or add background information.\n"
+            "Answerability Check\n"
+            "Answer if the context below addresses the question.\n"
+            "If the context doesn't answer the question, respond: 'I don't know.'\n"
             "="*60 + "\n"
         )
         
-        # Section 3: Context
+        # Section 3: Context (Simplified logic - show context if available)
         has_context = context and context != "No relevant context found in the uploaded documents."
         
-        # Use retrieval quality to determine if we should even show context
-        should_use_context = has_context
+        # Only block if absolutely no context
         if retrieval_quality:
-            quality_level = retrieval_quality.get('quality_level', 'unknown')
-            has_good_retrieval = retrieval_quality.get('has_good_retrieval', False)
-            avg_similarity = retrieval_quality.get('avg_similarity', 0.0)
-            avg_distance = retrieval_quality.get('avg_distance', float('inf'))
             chunk_count = retrieval_quality.get('chunk_count', 0)
-            
-            # If retrieval quality is poor OR no chunks retrieved, don't use the context
             if chunk_count == 0:
-                should_use_context = False
-                prompt_parts.append(
-                    f"\n⚠️ NO CONTEXT RETRIEVED:\n"
-                    f"No relevant documents found in the uploaded materials.\n"
-                    f"DECISION: Respond with exactly 'I don't know.' (nothing else).\n"
-                )
-            elif quality_level == 'poor' or (not has_good_retrieval and avg_similarity < 0.5) or avg_distance > 0.8:
-                should_use_context = False
-                prompt_parts.append(
-                    f"\n⚠️ RETRIEVAL QUALITY WARNING:\n"
-                    f"Retrieval quality is POOR (similarity: {avg_similarity:.2f}, distance: {avg_distance:.2f}, quality: {quality_level}).\n"
-                    f"The retrieved context is likely irrelevant or unreliable.\n"
-                    f"DECISION: Respond with exactly 'I don't know.' (nothing else).\n"
-                    f"Do NOT try to answer using this poor-quality context.\n"
-                )
+                has_context = False
         
-        if has_context and should_use_context:
-            # Trim context if too long
-            trimmed_context = context[:2000] + "\n[... additional context truncated ...]" if len(context) > 2000 else context
+        if has_context:
+            # Use max_context_chars from settings (4500)
+            from utils.config import settings
+            max_chars = settings.max_context_chars
+            trimmed_context = context[:max_chars] + "\n[... context truncated ...]" if len(context) > max_chars else context
             prompt_parts.append(f"Context from course materials:\n{trimmed_context}")
-        elif has_context and not should_use_context:
-            # Context exists but quality is poor - don't show it
-            prompt_parts.append("Context: Retrieved context is of poor quality and likely irrelevant.")
-            prompt_parts.append("Decision: Respond with exactly 'I don't know.' (nothing else).")
         else:
             prompt_parts.append("Context: No relevant context found.")
-            prompt_parts.append("Decision: Respond with exactly 'I don't know.' (nothing else).")
         
-        # Section 4: Decision Rule (Simple Binary)
+        # Section 4: Decision Rule (Simplified)
         prompt_parts.append(
             "\n" + "-"*60 + "\n"
             "Decision Rule:\n"
-            "- If context directly answers the question → Provide a clear answer with citations [source: filename|section]\n"
-            "- If context does NOT answer the question → Say exactly 'I don't know.' (nothing else)\n"
-            "- If retrieval quality is poor → Say exactly 'I don't know.' (nothing else)\n"
+            "- If context helps answer the question → Provide a clear answer with citations [source: filename]\n"
+            "- If context does NOT help → Say 'I don't know.'\n"
             "-"*60
         )
         

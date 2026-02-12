@@ -32,7 +32,7 @@ except (ImportError, AttributeError, Exception):
     # If telemetry patching fails, continue anyway
     pass
 
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 import logging
 
 logger = logging.getLogger(__name__)
@@ -63,10 +63,14 @@ class VectorDatabase:
         self.client = None
         self.collection = None
         self.embedding_model = None
+        self.reranker = None
+        self.use_openai_embeddings = False
+        self.openai_client = None
         
         # Initialize ChromaDB client and collection
         self._initialize_client()
         self._initialize_embedding_model()
+        self._initialize_reranker()
         self._initialize_collection()
     
     def _initialize_client(self):
@@ -83,25 +87,70 @@ class VectorDatabase:
             raise
     
     def _initialize_embedding_model(self):
-        """Initialize the sentence transformer model for embeddings."""
+        """Initialize embedding model (OpenAI or local SentenceTransformer)."""
         try:
-            # Use a lightweight, fast model for embeddings
-            self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-            logger.info("Embedding model initialized successfully")
+            from utils.config import settings
+            
+            # Check if OpenAI embeddings are enabled
+            if settings.use_openai_embeddings and settings.openai_api_key:
+                try:
+                    from openai import OpenAI
+                    self.openai_client = OpenAI(api_key=settings.openai_api_key)
+                    self.use_openai_embeddings = True
+                    logger.info(f"OpenAI embeddings initialized ({settings.openai_embedding_model})")
+                except Exception as e:
+                    logger.warning(f"Failed to initialize OpenAI embeddings: {e}. Falling back to local model.")
+                    self.use_openai_embeddings = False
+            
+            # Always initialize local model as fallback
+            if not self.use_openai_embeddings:
+                self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+                logger.info("Local embedding model initialized (all-MiniLM-L6-v2)")
+            else:
+                # Keep local model for document embeddings if needed
+                self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+                
         except Exception as e:
             logger.error(f"Failed to initialize embedding model: {e}")
             raise
     
+    def _initialize_reranker(self):
+        """Initialize cross-encoder reranker for better result ordering."""
+        try:
+            from utils.config import settings
+            
+            if settings.enable_reranking:
+                self.reranker = CrossEncoder(settings.reranker_model)
+                logger.info(f"Reranker initialized ({settings.reranker_model})")
+            else:
+                logger.info("Reranking disabled")
+        except Exception as e:
+            logger.warning(f"Failed to initialize reranker: {e}. Reranking will be disabled.")
+            self.reranker = None
+    
     def _get_embedding_function(self):
         """Create an embedding function for ChromaDB."""
         def embed_function(texts):
-            """Embed texts using the SentenceTransformer model."""
+            """Embed texts using OpenAI or SentenceTransformer."""
             if not texts:
                 return []
             # Handle both single strings and lists
             if isinstance(texts, str):
                 texts = [texts]
-            # Generate embeddings
+            
+            # Use OpenAI embeddings if enabled
+            if self.use_openai_embeddings and self.openai_client:
+                try:
+                    from utils.config import settings
+                    response = self.openai_client.embeddings.create(
+                        input=texts,
+                        model=settings.openai_embedding_model
+                    )
+                    return [item.embedding for item in response.data]
+                except Exception as e:
+                    logger.warning(f"OpenAI embedding failed: {e}. Using local model.")
+            
+            # Fallback to local model
             embeddings = self.embedding_model.encode(texts, convert_to_tensor=False)
             return embeddings.tolist() if hasattr(embeddings, 'tolist') else embeddings
         
@@ -288,6 +337,96 @@ class VectorDatabase:
             
         except Exception as e:
             logger.error(f"Failed to search similar documents: {e}")
+            return []
+    
+    async def search_similar_with_rerank(
+        self, 
+        query: str, 
+        n_results: int = None, 
+        rerank_top_k: int = None,
+        filter_metadata: Dict = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Search for similar documents with cross-encoder reranking.
+        
+        Args:
+            query: Search query text
+            n_results: Number of candidates to retrieve before reranking
+            rerank_top_k: Number of results to return after reranking
+            filter_metadata: Optional metadata filters
+            
+        Returns:
+            List of reranked document chunks with metadata
+        """
+        try:
+            from utils.config import settings
+            
+            # Use config defaults if not specified
+            n_results = n_results or settings.retrieval_top_k
+            rerank_top_k = rerank_top_k or settings.rerank_top_k
+            
+            # Step 1: Retrieve candidates with relaxed threshold
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=n_results,
+                where=filter_metadata
+            )
+            
+            # Format candidates
+            candidates = []
+            if results['documents'] and results['documents'][0]:
+                for i, doc in enumerate(results['documents'][0]):
+                    chunk_data = {
+                        'text': doc,
+                        'metadata': results['metadatas'][0][i] if results['metadatas'] else {},
+                        'distance': results['distances'][0][i] if results['distances'] else 0,
+                        'id': results['ids'][0][i] if results['ids'] else None
+                    }
+                    # Add preview
+                    preview = (doc or "").strip()
+                    chunk_data['preview'] = (preview[:300] + ("..." if len(preview) > 300 else ""))
+                    candidates.append(chunk_data)
+            
+            # Step 2: Filter by relaxed distance threshold
+            filtered = [c for c in candidates if c['distance'] < settings.similarity_threshold]
+            
+            if not filtered:
+                logger.info(f"No chunks passed similarity threshold for query: {query[:50]}...")
+                return []
+            
+            # Step 3: Rerank with cross-encoder if available
+            if self.reranker and len(filtered) > 1:
+                try:
+                    # Prepare pairs for reranking
+                    pairs = [[query, chunk['text']] for chunk in filtered]
+                    
+                    # Get reranker scores (higher is better)
+                    scores = self.reranker.predict(pairs)
+                    
+                    # Combine chunks with scores and sort
+                    ranked = sorted(
+                        zip(filtered, scores), 
+                        key=lambda x: x[1], 
+                        reverse=True
+                    )
+                    
+                    # Add reranker score to metadata
+                    final_results = []
+                    for chunk, score in ranked[:rerank_top_k]:
+                        chunk['rerank_score'] = float(score)
+                        final_results.append(chunk)
+                    
+                    logger.info(f"Reranked {len(filtered)} chunks, returning top {len(final_results)} for query: {query[:50]}...")
+                    return final_results
+                    
+                except Exception as e:
+                    logger.warning(f"Reranking failed: {e}. Returning top results without reranking.")
+            
+            # Fallback: return top results without reranking
+            return filtered[:rerank_top_k]
+            
+        except Exception as e:
+            logger.error(f"Failed to search with reranking: {e}")
             return []
     
     async def get_document_chunks(self, filename: str) -> List[Dict[str, Any]]:

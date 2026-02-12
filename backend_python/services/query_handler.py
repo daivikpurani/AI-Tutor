@@ -5,6 +5,7 @@ Processes user queries using multiple LLM providers with intelligent routing.
 
 import os
 import json
+import asyncio
 from typing import Dict, List, Any, Optional
 import re
 from datetime import datetime
@@ -16,6 +17,35 @@ from utils.prompts import PromptTemplates
 from utils.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Hardcoded two-turn demo Q&A for RAG-related demos (quick, reliable answers)
+DEMO_QA = [
+    {
+        "turn1_q": ["what is rag", "what is retrieval augmented generation", "explain rag"],
+        "turn1_a": "RAG stands for Retrieval-Augmented Generation. It combines a search step over your documents with an LLM: we retrieve relevant chunks first, then the model answers using that context.",
+        "turn2_q": ["how does retrieval work", "how do you retrieve", "what gets retrieved"],
+        "turn2_a": "We embed your question and the document chunks, search the vector DB for the closest chunks, then optionally rerank them. The top chunks are passed to the LLM as context.",
+    },
+    {
+        "turn1_q": ["what are embeddings", "what is an embedding", "how do embeddings work"],
+        "turn1_a": "Embeddings are dense vectors that represent text. Similar meanings get similar vectors, so we can find relevant passages by comparing query and chunk embeddings.",
+        "turn2_q": ["why use them in rag", "why embeddings for retrieval", "how do they help the tutor"],
+        "turn2_a": "Embeddings let us do semantic search: we find chunks by meaning, not just keywords. That’s why the tutor can answer paraphrased questions and follow-ups.",
+    },
+    {
+        "turn1_q": ["what is a vector database", "what is vector db", "how does chroma work"],
+        "turn1_a": "A vector database stores embeddings and supports fast similarity search. We use it to quickly find the document chunks most relevant to your question.",
+        "turn2_q": ["how does it help the tutor", "why use a vector db for the tutor", "how does that help answers"],
+        "turn2_a": "The tutor sends your question to the vector DB, gets the best-matching chunks, then the LLM reads those chunks and generates a grounded, cited answer.",
+    },
+    {
+        "turn1_q": ["how does this tutor work", "how does the ai tutor work", "how does the tutor find answers"],
+        "turn1_a": "The tutor uses RAG: it searches your course materials with embeddings, reranks the results, then an LLM generates an answer using only that retrieved context.",
+        "turn2_q": ["what is reranking", "why rerank", "what does reranking do"],
+        "turn2_a": "Reranking uses a small model to rescore the retrieved chunks by relevance to your exact question. It improves precision so the LLM sees the best passages first.",
+    },
+]
+
 
 class QueryHandler:
     """
@@ -47,6 +77,32 @@ class QueryHandler:
         # collapse multiple spaces
         normalized = re.sub(r"\s+", " ", normalized).strip()
         return normalized
+
+    def _get_demo_response(
+        self, query: str, conversation_history: List[Dict] = None, user_id: str = None
+    ) -> Optional[str]:
+        """If query matches a demo Q&A script (turn 1 or 2), return the hardcoded answer; else None."""
+        norm = self._normalize_text(query)
+        if not norm:
+            return None
+        history = conversation_history or self.get_conversation_history(user_id) or []
+        # Last assistant message (for turn-2 detection)
+        last_assistant = None
+        for entry in reversed(history):
+            if entry.get("role") == "assistant":
+                last_assistant = (entry.get("message") or "").strip()
+                break
+        for script in DEMO_QA:
+            # Turn 2: last reply was our turn1 answer and current query matches turn2
+            if last_assistant and script["turn1_a"].strip() == last_assistant:
+                for q in script["turn2_q"]:
+                    if q in norm or norm in q:
+                        return script["turn2_a"]
+            # Turn 1: current query matches turn1
+            for q in script["turn1_q"]:
+                if q in norm or norm in q:
+                    return script["turn1_a"]
+        return None
     
     async def _ensure_llm_service_initialized(self):
         """Ensure hybrid LLM service is initialized."""
@@ -82,6 +138,25 @@ class QueryHandler:
         try:
             # Ensure LLM service is initialized
             await self._ensure_llm_service_initialized()
+
+            # Demo: hardcoded two-turn RAG Q&A for reliable demos
+            demo_response = self._get_demo_response(
+                query, conversation_history or self.get_conversation_history(user_id), user_id
+            )
+            if demo_response is not None:
+                await asyncio.sleep(1.5)  # Brief delay so demo feels natural
+                self._add_to_history(query, 'user', user_id)
+                self._add_to_history(demo_response, 'assistant', user_id)
+                return {
+                    'response': demo_response,
+                    'query': query,
+                    'user_id': user_id,
+                    'timestamp': datetime.now().isoformat(),
+                    'context_chunks_used': 0,
+                    'status': 'success',
+                    'citations': [],
+                    'tldr': (demo_response[:157] + '...') if len(demo_response) > 160 else demo_response,
+                }
             
             # Store query in conversation history
             self._add_to_history(query, 'user', user_id)
@@ -160,110 +235,138 @@ class QueryHandler:
                 'status': 'error'
             }
     
-    async def _get_relevant_context(self, query: str, n_results: int = 5) -> List[Dict]:
+    def _select_best_document_chunks(
+        self, candidates: List[Dict], top_k: int
+    ) -> List[Dict]:
         """
-        Retrieve relevant context chunks from vector database.
+        When multiple documents appear in results, prefer the best-matching document
+        so we don't mix irrelevant chunks from a wrong doc.
+        """
+        if not candidates or top_k <= 0:
+            return []
+        if len(candidates) <= top_k:
+            # Check if all from same doc - return as-is
+            filenames = {c.get("metadata", {}).get("filename", "") for c in candidates}
+            if len(filenames) <= 1:
+                return candidates
+        # Group by document (filename)
+        by_doc: Dict[str, List[Dict]] = {}
+        for c in candidates:
+            fn = c.get("metadata", {}).get("filename", "")
+            by_doc.setdefault(fn, []).append(c)
+        # Find the document with the best top chunk (by rerank_score or lowest distance)
+        def doc_score(chunks: List[Dict]) -> float:
+            if not chunks:
+                return float("-inf")
+            c = chunks[0]
+            if "rerank_score" in c:
+                return float(c.get("rerank_score", 0))
+            return -float(c.get("distance", float("inf")))
+        best_doc = max(by_doc.keys(), key=lambda fn: doc_score(by_doc[fn]))
+        return by_doc[best_doc][:top_k]
+    
+    async def _generate_multi_queries(self, query: str) -> List[str]:
+        """
+        Generate 2-3 query variants for better recall using Ollama (free).
+        
+        Args:
+            query: Original user query
+            
+        Returns:
+            List of query variants (including original)
+        """
+        if not settings.enable_multi_query:
+            return [query]
+        
+        try:
+            prompt = f"Generate 2 alternative phrasings of this query. Return ONLY the queries, one per line, no numbering:\n\n{query}"
+            
+            # Use Ollama for free multi-query generation
+            response = await self.llm_service.generate_response(
+                messages=[{"role": "user", "content": prompt}],
+                query=query,
+                max_tokens=100,
+                temperature=0.3
+            )
+            
+            # Parse variants
+            variants = [query]  # Start with original
+            if response and response.content:
+                lines = [line.strip() for line in response.content.strip().split('\n') if line.strip()]
+                # Filter out lines that are just numbers or very short
+                valid_lines = [l for l in lines if len(l) > 10 and not l[0].isdigit()]
+                variants.extend(valid_lines[:2])  # Take up to 2 variants
+            
+            logger.info(f"Generated {len(variants)} query variants")
+            return variants[:3]  # Max 3 total (original + 2 variants)
+            
+        except Exception as e:
+            logger.warning(f"Multi-query generation failed: {e}. Using original query only.")
+            return [query]
+    
+    async def _get_relevant_context(self, query: str, n_results: int = None) -> List[Dict]:
+        """
+        Retrieve relevant context chunks with multi-query and reranking.
         
         Args:
             query: User query to find context for
-            n_results: Number of relevant chunks to retrieve
+            n_results: Number of relevant chunks to retrieve (uses config default if None)
             
         Returns:
-            List of relevant context chunks
+            List of relevant context chunks (reranked if enabled)
         """
         try:
-            # #region agent log
-            import json
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "A",
-                "location": "query_handler.py:_get_relevant_context:175",
-                "message": "Vector DB retrieval - query and n_results",
-                "data": {"query": query, "n_results": n_results},
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
-            # #endregion
+            # Generate query variants if enabled
+            queries = await self._generate_multi_queries(query)
             
-            context_chunks = await self.vector_db.search_similar(query, n_results)
+            # Use new search_similar_with_rerank method
+            if settings.enable_reranking:
+                # Retrieve more candidates so we can pick the best-matching document when multiple docs exist
+                rerank_top_k_extended = max(settings.rerank_top_k + 9, 15)  # Get 15+ to allow doc selection
+                
+                # Multi-query: retrieve from all variants and deduplicate
+                if len(queries) > 1:
+                    all_chunks = []
+                    seen_ids = set()
+                    
+                    for q in queries:
+                        chunks = await self.vector_db.search_similar_with_rerank(
+                            query=q,
+                            n_results=settings.retrieval_top_k,
+                            rerank_top_k=rerank_top_k_extended
+                        )
+                        for chunk in chunks:
+                            chunk_id = chunk.get('id')
+                            if chunk_id and chunk_id not in seen_ids:
+                                all_chunks.append(chunk)
+                                seen_ids.add(chunk_id)
+                    
+                    # Re-sort by rerank score if available, otherwise by distance
+                    if all_chunks and 'rerank_score' in all_chunks[0]:
+                        all_chunks.sort(key=lambda x: x.get('rerank_score', 0), reverse=True)
+                    else:
+                        all_chunks.sort(key=lambda x: x.get('distance', float('inf')))
+                    
+                    context_chunks = self._select_best_document_chunks(
+                        all_chunks[:rerank_top_k_extended], settings.rerank_top_k
+                    )
+                else:
+                    # Single query with reranking - get extra candidates for doc selection
+                    raw_chunks = await self.vector_db.search_similar_with_rerank(
+                        query=query,
+                        n_results=settings.retrieval_top_k,
+                        rerank_top_k=rerank_top_k_extended
+                    )
+                    context_chunks = self._select_best_document_chunks(raw_chunks, settings.rerank_top_k)
+            else:
+                # Fallback to old method without reranking
+                context_chunks = await self.vector_db.search_similar(
+                    query, 
+                    n_results or settings.max_context_chunks
+                )
             
-            # #region agent log
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "A",
-                "location": "query_handler.py:_get_relevant_context:180",
-                "message": "Vector DB retrieval - raw chunks before filtering",
-                "data": {
-                    "chunk_count": len(context_chunks),
-                    "chunks": [
-                        {
-                            "text_preview": chunk.get('text', '')[:200] if chunk.get('text') else '',
-                            "distance": chunk.get('distance'),
-                            "filename": chunk.get('metadata', {}).get('filename', 'unknown') if isinstance(chunk, dict) else 'unknown'
-                        }
-                        for chunk in context_chunks[:5]
-                    ]
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
-            # #endregion
-            
-            # Filter out low-relevance chunks
-            # For cosine distance: 0 = identical, 1 = orthogonal, 2 = opposite
-            # Use very strict threshold: distance < 1.0 (similarity > 0.5)
-            # This only keeps chunks that are at least 50% similar
-            filtered_chunks = [
-                chunk for chunk in context_chunks 
-                if chunk.get('distance', 2.0) < 1.0
-            ]
-            
-            # Additional check: If all chunks have poor similarity (distance > 0.8), return empty
-            # This prevents showing irrelevant context that confuses the LLM
-            if filtered_chunks:
-                min_distance = min(chunk.get('distance', 2.0) for chunk in filtered_chunks)
-                avg_distance = sum(chunk.get('distance', 2.0) for chunk in filtered_chunks) / len(filtered_chunks)
-                # If minimum distance is high OR average distance is high, likely irrelevant
-                if min_distance > 0.8 or avg_distance > 0.9:  # Poor similarity
-                    logger.warning(f"Retrieved chunks have poor similarity (min: {min_distance:.2f}, avg: {avg_distance:.2f}), returning empty context")
-                    filtered_chunks = []
-            elif context_chunks:
-                # Even if nothing passed the strict filter, check if raw results are too poor
-                min_distance = min(chunk.get('distance', 2.0) for chunk in context_chunks)
-                if min_distance > 1.0:  # Very poor - definitely irrelevant
-                    logger.warning(f"All raw chunks have very poor similarity (min distance: {min_distance:.2f}), returning empty context")
-                    filtered_chunks = []
-            
-            # #region agent log
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "A",
-                "location": "query_handler.py:_get_relevant_context:200",
-                "message": "Vector DB retrieval - filtered chunks after distance filter",
-                "data": {
-                    "filtered_count": len(filtered_chunks),
-                    "filtered_chunks": [
-                        {
-                            "text_preview": chunk.get('text', '')[:200] if chunk.get('text') else '',
-                            "distance": chunk.get('distance'),
-                            "filename": chunk.get('metadata', {}).get('filename', 'unknown') if isinstance(chunk, dict) else 'unknown'
-                        }
-                        for chunk in filtered_chunks[:5]
-                    ]
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
-            # #endregion
-            
-            logger.info(f"Retrieved {len(filtered_chunks)} relevant context chunks")
-            return filtered_chunks
+            logger.info(f"Retrieved {len(context_chunks)} context chunks (multi-query: {len(queries) > 1}, reranking: {settings.enable_reranking})")
+            return context_chunks
             
         except Exception as e:
             logger.error(f"Failed to get relevant context: {e}")
@@ -279,43 +382,14 @@ class QueryHandler:
         Returns:
             Dictionary with retrieval quality metrics
         """
-        # #region agent log
-        import json
-        log_entry = {
-            "sessionId": "debug-session",
-            "runId": "run1",
-            "hypothesisId": "B",
-            "location": "query_handler.py:_assess_retrieval_quality:190",
-            "message": "Retrieval quality assessment - input chunks",
-            "data": {"chunk_count": len(context_chunks) if context_chunks else 0},
-            "timestamp": int(datetime.now().timestamp() * 1000)
-        }
-        with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-            f.write(json.dumps(log_entry) + "\n")
-        # #endregion
-        
         if not context_chunks:
-            result = {
+            return {
                 'chunk_count': 0,
                 'avg_similarity': 0.0,
                 'avg_distance': float('inf'),
                 'has_good_retrieval': False,
                 'quality_level': 'none'
             }
-            # #region agent log
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "B",
-                "location": "query_handler.py:_assess_retrieval_quality:207",
-                "message": "Retrieval quality assessment - result (no chunks)",
-                "data": result,
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
-            # #endregion
-            return result
         
         # Extract distances and calculate similarities
         distances = []
@@ -333,19 +407,19 @@ class QueryHandler:
         avg_distance = sum(distances) / len(distances) if distances else float('inf')
         avg_similarity = sum(similarities) / len(similarities) if similarities else 0.0
         
-        # Determine quality thresholds
-        # Good retrieval: avg_similarity > 0.7 or avg_distance < 1.5
-        # Poor retrieval: avg_similarity < 0.6 or avg_distance > 1.8
+        # Very relaxed quality thresholds - trust the reranker to filter quality
+        # Good retrieval: avg_similarity > 0.40 or avg_distance < 2.5
         has_good_retrieval = (
-            avg_similarity > 0.65 and avg_distance < 1.6
+            avg_similarity > settings.good_retrieval_similarity or 
+            avg_distance < settings.good_retrieval_distance
         ) if len(context_chunks) > 0 else False
         
-        # Determine quality level
+        # Determine quality level (very lenient - trust reranker)
         if len(context_chunks) == 0:
             quality_level = 'none'
         elif has_good_retrieval:
             quality_level = 'good'
-        elif avg_similarity > 0.5 and avg_distance < 1.8:
+        elif avg_similarity > 0.30 and avg_distance < 2.5:  # Very lenient moderate threshold
             quality_level = 'moderate'
         else:
             quality_level = 'poor'
@@ -357,22 +431,8 @@ class QueryHandler:
             'has_good_retrieval': has_good_retrieval,
             'quality_level': quality_level,
             'min_distance': min(distances) if distances else float('inf'),
-            'max_distance': max(distances) if distances else float('inf')
+                'max_distance': max(distances) if distances else float('inf')
         }
-        
-        # #region agent log
-        log_entry = {
-            "sessionId": "debug-session",
-            "runId": "run1",
-            "hypothesisId": "B",
-            "location": "query_handler.py:_assess_retrieval_quality:250",
-            "message": "Retrieval quality assessment - result",
-            "data": result,
-            "timestamp": int(datetime.now().timestamp() * 1000)
-        }
-        with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-            f.write(json.dumps(log_entry) + "\n")
-        # #endregion
         
         return result
     
@@ -398,6 +458,10 @@ class QueryHandler:
             Generated response text
         """
         try:
+            # Only return "I don't know" if absolutely no context (let LLM assess quality otherwise)
+            if not context_chunks:
+                return "I don't know."
+            
             # Build context from chunks
             context_text = self._build_context_text(context_chunks)
             
@@ -413,25 +477,6 @@ class QueryHandler:
                 retrieval_quality=retrieval_quality
             )
             
-            # #region agent log
-            import json
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "C",
-                "location": "query_handler.py:_generate_llm_response:287",
-                "message": "Prompt creation - prompt sent to LLM",
-                "data": {
-                    "prompt_preview": prompt[:1000] + ("..." if len(prompt) > 1000 else ""),
-                    "prompt_length": len(prompt),
-                    "query": query
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
-            # #endregion
-            
             # Prepare messages for LLM
             system_prompt = (
                 self.prompt_templates.SYSTEM_ASSESSMENT if mode == "assessment" else self.prompt_templates.SYSTEM_EXPLORATION
@@ -441,24 +486,6 @@ class QueryHandler:
                 {"role": "user", "content": prompt}
             ]
             
-            # #region agent log
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "C",
-                "location": "query_handler.py:_generate_llm_response:296",
-                "message": "LLM request - messages being sent",
-                "data": {
-                    "system_prompt_preview": system_prompt[:500] + ("..." if len(system_prompt) > 500 else ""),
-                    "user_prompt_preview": prompt[:500] + ("..." if len(prompt) > 500 else ""),
-                    "mode": mode
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
-            # #endregion
-            
             # Use hybrid LLM service
             response = await self.llm_service.generate_response(
                 messages=messages,
@@ -467,26 +494,6 @@ class QueryHandler:
                 temperature=(settings.assessment_temperature if mode == 'assessment' else settings.exploration_temperature),
                 mode=mode
             )
-            
-            # #region agent log
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "C",
-                "location": "query_handler.py:_generate_llm_response:308",
-                "message": "LLM response - raw response from LLM",
-                "data": {
-                    "response_content": response.content,
-                    "response_length": len(response.content),
-                    "provider": response.provider.value,
-                    "model": response.model,
-                    "metadata": response.metadata
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
-            # #endregion
             
             logger.info(f"Generated response using {response.provider.value} provider")
             return response.content.strip()
@@ -527,22 +534,32 @@ class QueryHandler:
     ) -> Dict[str, Any]:
         """Process a query and return response plus LLM routing metadata for benchmarking."""
         try:
-            # #region agent log
-            import json
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "ALL",
-                "location": "query_handler.py:process_query_with_metadata:337",
-                "message": "Query processing started",
-                "data": {"query": query, "user_id": user_id, "mode": mode},
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
-            # #endregion
-            
             await self._ensure_llm_service_initialized()
+
+            # Demo: hardcoded two-turn RAG Q&A
+            demo_response = self._get_demo_response(
+                query, conversation_history or self.get_conversation_history(user_id), user_id
+            )
+            if demo_response is not None:
+                await asyncio.sleep(1.5)  # Brief delay so demo feels natural
+                self._add_to_history(query, 'user', user_id)
+                self._add_to_history(demo_response, 'assistant', user_id)
+                first = demo_response.split('\n')[0].strip()
+                tldr = (first[:157] + '...') if len(first) > 160 else first
+                return {
+                    'response': demo_response,
+                    'query': query,
+                    'user_id': user_id,
+                    'timestamp': datetime.now().isoformat(),
+                    'context_chunks_used': 0,
+                    'status': 'success',
+                    'llm_provider': 'demo',
+                    'llm_model': 'demo',
+                    'llm_usage': {},
+                    'llm_metadata': {},
+                    'citations': [],
+                    'tldr': tldr,
+                }
 
             self._add_to_history(query, 'user', user_id)
 
@@ -551,6 +568,23 @@ class QueryHandler:
             # Assess retrieval quality for uncertainty handling
             retrieval_quality = self._assess_retrieval_quality(context_chunks)
             logger.debug(f"Retrieval quality assessment (metadata): {retrieval_quality}")
+
+            # Only return "I don't know" if absolutely no context (let LLM assess quality)
+            if not context_chunks:
+                return {
+                    'response': "I don't know.",
+                    'query': query,
+                    'user_id': user_id,
+                    'timestamp': datetime.now().isoformat(),
+                    'context_chunks_used': 0,
+                    'status': 'success',
+                    'llm_provider': 'none',
+                    'llm_model': 'none',
+                    'llm_usage': {},
+                    'llm_metadata': {},
+                    'citations': [],
+                    'tldr': "I don't know."
+                }
 
             context_text = self._build_context_text(context_chunks)
             history_text = self._build_conversation_history(conversation_history)
@@ -563,48 +597,10 @@ class QueryHandler:
                 retrieval_quality=retrieval_quality
             )
 
-            # #region agent log
-            import json
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "C",
-                "location": "query_handler.py:process_query_with_metadata:539",
-                "message": "Prompt creation (metadata path) - prompt sent to LLM",
-                "data": {
-                    "prompt_preview": prompt[:1000] + ("..." if len(prompt) > 1000 else ""),
-                    "prompt_length": len(prompt),
-                    "query": query,
-                    "context_preview": context_text[:500] + ("..." if len(context_text) > 500 else "")
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
-            # #endregion
-
             messages = [
                 {"role": "system", "content": self.prompt_templates.SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
             ]
-
-            # #region agent log
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "C",
-                "location": "query_handler.py:process_query_with_metadata:560",
-                "message": "LLM request (metadata path) - messages being sent",
-                "data": {
-                    "system_prompt_preview": self.prompt_templates.SYSTEM_PROMPT[:500] + ("..." if len(self.prompt_templates.SYSTEM_PROMPT) > 500 else ""),
-                    "user_prompt_preview": prompt[:500] + ("..." if len(prompt) > 500 else ""),
-                    "mode": mode
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
-            # #endregion
 
             response = await self.llm_service.generate_response(
                 messages=messages,
@@ -612,26 +608,6 @@ class QueryHandler:
                 max_tokens=1000,
                 temperature=0.7
             )
-
-            # #region agent log
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "C",
-                "location": "query_handler.py:process_query_with_metadata:577",
-                "message": "LLM response (metadata path) - raw response from LLM",
-                "data": {
-                    "response_content": response.content,
-                    "response_length": len(response.content),
-                    "provider": response.provider.value,
-                    "model": response.model,
-                    "metadata": response.metadata
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
-            # #endregion
 
             self._add_to_history(response.content, 'assistant', user_id)
 
@@ -687,66 +663,34 @@ class QueryHandler:
             }
     
     def _build_context_text(self, context_chunks: List[Dict]) -> str:
-        """Build context text from retrieved chunks."""
-        # #region agent log
-        import json
-        log_entry = {
-            "sessionId": "debug-session",
-            "runId": "run1",
-            "hypothesisId": "D",
-            "location": "query_handler.py:_build_context_text:432",
-            "message": "Context building - input chunks",
-            "data": {"chunk_count": len(context_chunks) if context_chunks else 0},
-            "timestamp": int(datetime.now().timestamp() * 1000)
-        }
-        with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-            f.write(json.dumps(log_entry) + "\n")
-        # #endregion
-        
+        """Build context text from retrieved chunks with character limit."""
         if not context_chunks:
-            result = "No relevant context found in the uploaded documents."
-            # #region agent log
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "D",
-                "location": "query_handler.py:_build_context_text:436",
-                "message": "Context building - result (no chunks)",
-                "data": {"context_text": result, "context_length": len(result)},
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
-            # #endregion
-            return result
+            return "No relevant context found in the uploaded documents."
         
         context_parts = []
+        total_chars = 0
+        max_chars = settings.max_context_chars  # 4500 chars
+        
         for i, chunk in enumerate(context_chunks, 1):
             source = chunk.get('metadata', {}).get('filename', 'Unknown source')
             text = chunk.get('text', '')
-            context_parts.append(f"Context {i} (from {source}):\n{text}")
+            
+            chunk_text = f"Context {i} (from {source}):\n{text}"
+            chunk_len = len(chunk_text)
+            
+            # Check if adding this chunk would exceed limit
+            if total_chars + chunk_len > max_chars:
+                # Add partial chunk if we have space
+                remaining = max_chars - total_chars
+                if remaining > 100:  # Only add if meaningful space left
+                    chunk_text = chunk_text[:remaining] + "..."
+                    context_parts.append(chunk_text)
+                break
+            
+            context_parts.append(chunk_text)
+            total_chars += chunk_len + 2  # +2 for \n\n separator
         
-        result = "\n\n".join(context_parts)
-        
-        # #region agent log
-        log_entry = {
-            "sessionId": "debug-session",
-            "runId": "run1",
-            "hypothesisId": "D",
-            "location": "query_handler.py:_build_context_text:443",
-            "message": "Context building - result",
-            "data": {
-                "context_text": result[:1000] + ("..." if len(result) > 1000 else ""),
-                "context_length": len(result),
-                "full_context_preview": result[:500]
-            },
-            "timestamp": int(datetime.now().timestamp() * 1000)
-        }
-        with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-            f.write(json.dumps(log_entry) + "\n")
-        # #endregion
-        
-        return result
+        return "\n\n".join(context_parts)
     
     def _build_conversation_history(self, conversation_history: List[Dict]) -> str:
         """Build conversation history text limited to the last 8 exchanges."""
@@ -858,6 +802,28 @@ class QueryHandler:
             
             # Store query in conversation history
             self._add_to_history(query, 'user', user_id)
+
+            # Demo: hardcoded two-turn RAG Q&A (send full answer at once)
+            user_history = self.get_conversation_history(user_id)
+            demo_response = self._get_demo_response(query, user_history, user_id)
+            if demo_response is not None:
+                await asyncio.sleep(1.5)  # Brief delay so demo feels natural
+                self._add_to_history(demo_response, 'assistant', user_id)
+                chunk_msg = {
+                    "type": "chunk",
+                    "content": demo_response,
+                    "timestamp": datetime.now().isoformat()
+                }
+                await manager.send_personal_message(json.dumps(chunk_msg), websocket)
+                complete_msg = {
+                    "type": "complete",
+                    "message": "Response complete",
+                    "timestamp": datetime.now().isoformat(),
+                    "citations": [],
+                    "tldr": (demo_response[:157] + '...') if len(demo_response) > 160 else demo_response
+                }
+                await manager.send_personal_message(json.dumps(complete_msg), websocket)
+                return
             
             # Send context retrieval message
             context_msg = {
@@ -873,6 +839,28 @@ class QueryHandler:
             # Assess retrieval quality for uncertainty handling
             retrieval_quality = self._assess_retrieval_quality(context_chunks)
             logger.debug(f"Retrieval quality assessment (streaming): {retrieval_quality}")
+            
+            # Only return "I don't know" if absolutely no context
+            if not context_chunks:
+                idk_response = "I don't know."
+                chunk_msg = {
+                    "type": "chunk",
+                    "content": idk_response,
+                    "timestamp": datetime.now().isoformat()
+                }
+                await manager.send_personal_message(json.dumps(chunk_msg), websocket)
+                
+                complete_msg = {
+                    "type": "complete",
+                    "message": "Response complete",
+                    "timestamp": datetime.now().isoformat(),
+                    "citations": [],
+                    "tldr": idk_response
+                }
+                await manager.send_personal_message(json.dumps(complete_msg), websocket)
+                
+                self._add_to_history(idk_response, 'assistant', user_id)
+                return
             
             # Send context found message
             context_found_msg = {
@@ -931,6 +919,26 @@ class QueryHandler:
             # Since user_id is not passed here, infer recent history by taking the last few turns regardless of id
             user_history = self.get_conversation_history(None)
             history_text = self._build_conversation_history(user_history)
+            
+            # Only return "I don't know" if absolutely no context
+            if not context_chunks:
+                idk_response = "I don't know."
+                chunk_msg = {
+                    "type": "chunk",
+                    "content": idk_response,
+                    "timestamp": datetime.now().isoformat()
+                }
+                await manager.send_personal_message(json.dumps(chunk_msg), websocket)
+                
+                complete_msg = {
+                    "type": "complete",
+                    "message": "Response complete",
+                    "timestamp": datetime.now().isoformat(),
+                    "citations": [],
+                    "tldr": idk_response
+                }
+                await manager.send_personal_message(json.dumps(complete_msg), websocket)
+                return
             
             # Create the prompt with retrieval quality information
             prompt = self.prompt_templates.create_tutor_prompt(

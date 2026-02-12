@@ -12,6 +12,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Try to import LangChain for semantic chunking
+try:
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    LANGCHAIN_AVAILABLE = True
+except ImportError:
+    LANGCHAIN_AVAILABLE = False
+    logger.warning("LangChain not available. Semantic chunking will fall back to default method.")
+
 class DocumentChunker:
     """
     Enhanced document chunker for vector database storage.
@@ -154,6 +162,75 @@ class DocumentChunker:
         logger.info(f"Created {len(chunks)} chunks from text (source: {source}, avg size: {sum(len(c['text']) for c in chunks) / len(chunks) if chunks else 0:.0f} chars)")
         return chunks
     
+    def chunk_text_semantic(self, text: str, source: str = "text_input") -> List[Dict[str, Any]]:
+        """
+        Split text using LangChain's RecursiveCharacterTextSplitter for better semantic boundaries.
+        
+        This method preserves markdown headers and section boundaries for cleaner chunks.
+        Falls back to default chunk_text if LangChain is not available.
+        
+        Args:
+            text: Input text to chunk
+            source: Source identifier for the text
+            
+        Returns:
+            List of chunk dictionaries with metadata
+        """
+        if not LANGCHAIN_AVAILABLE:
+            logger.warning("LangChain not available, falling back to default chunking")
+            return self.chunk_text(text, source)
+        
+        if not text.strip():
+            logger.warning("Empty text provided for semantic chunking")
+            return []
+        
+        try:
+            # Create RecursiveCharacterTextSplitter with semantic separators
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=self.chunk_size,
+                chunk_overlap=self.chunk_overlap,
+                length_function=len,
+                separators=[
+                    "\n## ",      # Markdown h2
+                    "\n### ",     # Markdown h3
+                    "\n#### ",    # Markdown h4
+                    "\n\n",       # Paragraph breaks
+                    "\n",         # Line breaks
+                    ". ",         # Sentence breaks
+                    " ",          # Word breaks
+                    ""            # Character breaks (fallback)
+                ],
+                is_separator_regex=False
+            )
+            
+            # Split text
+            text_chunks = text_splitter.split_text(text)
+            
+            # Convert to our chunk format
+            chunks = []
+            for i, chunk_text in enumerate(text_chunks):
+                if chunk_text.strip():
+                    chunk_data = {
+                        'text': chunk_text.strip(),
+                        'start_pos': -1,  # LangChain doesn't provide positions
+                        'end_pos': -1,
+                        'chunk_id': i,
+                        'metadata': {
+                            'chunk_size': len(chunk_text),
+                            'source': source,
+                            'total_chunks': len(text_chunks),
+                            'chunking_method': 'semantic_langchain'
+                        }
+                    }
+                    chunks.append(chunk_data)
+            
+            logger.info(f"Created {len(chunks)} semantic chunks from text (source: {source}, avg size: {sum(len(c['text']) for c in chunks) / len(chunks) if chunks else 0:.0f} chars)")
+            return chunks
+            
+        except Exception as e:
+            logger.error(f"Semantic chunking failed: {e}. Falling back to default chunking.")
+            return self.chunk_text(text, source)
+    
     def chunk_file(self, file_path: str) -> List[Dict[str, Any]]:
         """
         Chunk a file based on its format.
@@ -181,8 +258,17 @@ class DocumentChunker:
             logger.warning(f"No text content extracted from {file_path}")
             return []
         
-        # Chunk the extracted text
-        chunks = self.chunk_text(text, source=str(file_path))
+        # Chunk the extracted text (use semantic if enabled)
+        try:
+            from utils.config import settings
+            use_semantic = settings.use_semantic_chunking
+        except (ImportError, AttributeError):
+            use_semantic = False
+        
+        if use_semantic and LANGCHAIN_AVAILABLE:
+            chunks = self.chunk_text_semantic(text, source=str(file_path))
+        else:
+            chunks = self.chunk_text(text, source=str(file_path))
         
         # Add file metadata to each chunk
         for chunk in chunks:

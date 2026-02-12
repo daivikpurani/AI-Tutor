@@ -761,52 +761,11 @@ class HybridLLMService:
             if start != -1 and end != -1 and end > start:
                 raw = raw[start:end+1]
             data = json.loads(raw)
-            
-            # #region agent log
-            import datetime
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "E",
-                "location": "llm_service.py:_self_check:763",
-                "message": "Self-check result",
-                "data": {
-                    "self_check_result": data,
-                    "draft_answer_preview": draft_answer[:500] + ("..." if len(draft_answer) > 500 else ""),
-                    "mode": mode
-                },
-                "timestamp": int(datetime.datetime.now().timestamp() * 1000)
-            }
-            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
-            # #endregion
-            
             return data
         except Exception as e:
             logger.warning(f"Self-check parsing failed: {e}")
             # Conservative low confidence on parse failure
             result = {"confidence": 0.0, "issues": ["parse_error"], "missing_citations": True} if mode == "assessment" else {"confidence": 0.3, "notes": ["parse_error"]}
-            
-            # #region agent log
-            import datetime
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "E",
-                "location": "llm_service.py:_self_check:770",
-                "message": "Self-check failed - parse error",
-                "data": {
-                    "self_check_result": result,
-                    "error": str(e),
-                    "draft_answer_preview": draft_answer[:500] + ("..." if len(draft_answer) > 500 else ""),
-                    "mode": mode
-                },
-                "timestamp": int(datetime.datetime.now().timestamp() * 1000)
-            }
-            with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
-            # #endregion
-            
             return result
     
     async def generate_response_with_provider(
@@ -901,28 +860,6 @@ class HybridLLMService:
         threshold = assessment_min if mode == 'assessment' else exploration_min
         missing_citations = bool(check.get('missing_citations', False)) if mode == 'assessment' else False
         confidence = float(check.get('confidence', 0.0)) if isinstance(check.get('confidence', None), (int, float)) else 0.0
-
-        # #region agent log
-        import datetime
-        log_entry = {
-            "sessionId": "debug-session",
-            "runId": "run1",
-            "hypothesisId": "E",
-            "location": "llm_service.py:generate_response:863",
-            "message": "Self-check evaluation - threshold comparison",
-            "data": {
-                "confidence": confidence,
-                "threshold": threshold,
-                "missing_citations": missing_citations,
-                "mode": mode,
-                "will_escalate": (confidence < threshold) or missing_citations,
-                "check_result": check
-            },
-            "timestamp": int(datetime.datetime.now().timestamp() * 1000)
-        }
-        with open("/Users/daivikpurani/Desktop/ACAD/Thesis/code/FinalProject/.cursor/debug.log", "a") as f:
-            f.write(json.dumps(log_entry) + "\n")
-        # #endregion
 
         escalated = False
         final_response = draft

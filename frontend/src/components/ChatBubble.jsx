@@ -18,4 +18,3 @@ function ChatBubble({ message, onRetry, onCopy }) {
 
 export default ChatBubble;
 
-
