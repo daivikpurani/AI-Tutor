@@ -22,7 +22,7 @@ This document contains comprehensive technical details for developers working on
 git clone https://github.com/daivikpurani/Ai-Tutor.git
 cd Ai-Tutor
 npm run setup
-cp backend_python/env.example backend_python/.env
+cp backend_python/.env.example backend_python/.env
 
 # Configure environment variables
 # Edit backend_python/.env with your API keys
@@ -41,7 +41,7 @@ npm run dev
 ### Prerequisites
 
 - **Node.js**: >= 18.0.0
-- **Python**: >= 3.9.0
+- **Python**: 3.11 or 3.12 (required for ChromaDB; 3.14 is not supported)
 - **npm**: Latest stable version
 - **pip**: Latest stable version
 - **Git**: Latest version
@@ -72,22 +72,24 @@ npm run setup
 # Install root dependencies
 npm install
 
-# Install backend dependencies
+# Install backend dependencies (use Python 3.11 or 3.12)
 cd backend_python && pip install -r requirements.txt && cd ..
 
 # Install frontend dependencies
 cd frontend && npm install && cd ..
 
-# Install Python dependencies
+# Install Python script dependencies (if needed)
 pip install -r scripts/requirements.txt
 ```
+
+**Python version:** ChromaDB and some deps require Python 3.11 or 3.12. If you see Pydantic or ChromaDB errors, create a venv with `python3.11 -m venv venv` and install there. See [CHROMADB_UPGRADE_ISSUES.md](CHROMADB_UPGRADE_ISSUES.md) for details.
 
 ### Environment Configuration
 
 Copy the example environment file and configure:
 
 ```bash
-cp backend_python/env.example backend_python/.env
+cp backend_python/.env.example backend_python/.env
 ```
 
 Edit `backend_python/.env` with your actual API keys and configuration:
@@ -121,7 +123,18 @@ MAX_CONTEXT_CHUNKS=5
 
 # CORS Origins
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# Security (optional)
+REJECT_ON_INJECTION=false
+RATE_LIMIT_CHAT=60/minute
+RATE_LIMIT_UPLOAD=10/minute
 ```
+
+### Security
+
+- **Rate limiting:** Chat and upload endpoints use SlowAPI; limits are configurable via `RATE_LIMIT_CHAT` and `RATE_LIMIT_UPLOAD` in `.env`.
+- **Prompt security:** User input is wrapped in delimiters and checked for injection patterns. Set `REJECT_ON_INJECTION=true` to return a safe message instead of calling the LLM when patterns (e.g. "ignore previous instructions") are detected. See `backend_python/utils/prompt_guard.py`.
+- **Production:** Set `ENVIRONMENT=production`; the API returns generic error messages and avoids logging prompt/response content.
 
 ## Project Architecture
 
@@ -131,7 +144,7 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Frontend      │    │   Backend       │    │   Vector DB     │
 │   (React/Vite)  │◄──►│   (FastAPI)     │◄──►│   (ChromaDB)    │
-│   Port: 3000    │    │   Port: 8000    │    │   (Local)       │
+│   Port: 5173    │    │   Port: 8000    │    │   (Local)       │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
          │                       │                       │
@@ -148,7 +161,7 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 
 #### Frontend (React + Vite)
 - **Location**: `frontend/`
-- **Port**: 3000
+- **Port**: 5173 (Vite dev)
 - **Main Component**: `src/App.jsx`
 - **Styling**: `src/App.css`
 - **Build Tool**: Vite
@@ -368,7 +381,7 @@ backend_python/
 ├── main.py              # FastAPI application entry point
 ├── requirements.txt     # Python dependencies
 ├── start.sh            # Startup script
-├── env.example         # Environment configuration template
+├── .env.example        # Environment configuration template
 ├── services/
 │   ├── query_handler.py   # Enhanced query processing with LLM
 │   ├── vector_db.py       # ChromaDB integration

@@ -175,10 +175,9 @@ class OpenAIProvider(BaseLLMProvider):
         model = model or self.default_model
         
         try:
-            # Debug: Log what we're sending to OpenAI
+            # Log only length to avoid leaking prompt/content to logs
             user_message = messages[-1]['content'] if messages else ""
-            logger.info(f"OpenAI streaming request - Model: {model}, User message length: {len(user_message)}")
-            logger.debug(f"OpenAI user message: {user_message[:200]}...")
+            logger.info("OpenAI streaming request - Model: %s, User message length: %d", model, len(user_message))
             
             stream = await self.client.chat.completions.create(
                 model=model,
@@ -427,9 +426,8 @@ class OllamaProvider(BaseLLMProvider):
             # Convert messages to Ollama format
             prompt = self._convert_messages_to_prompt(messages)
             
-            # Debug: Log what we're sending to Ollama
-            logger.info(f"Ollama streaming request - Model: {model}, Prompt length: {len(prompt)}")
-            logger.debug(f"Ollama prompt: {prompt[:200]}...")
+            # Log only length to avoid leaking prompt content to logs
+            logger.info("Ollama streaming request - Model: %s, Prompt length: %d", model, len(prompt))
             
             stream = ollama.chat(
                 model=model,

@@ -88,7 +88,7 @@ mkdir -p logs
 # Copy environment file if it doesn't exist
 if [ ! -f ".env" ]; then
     echo "⚙️ Creating environment file..."
-    cp env.example .env
+    cp .env.example .env
     echo "⚠️ Please update .env file with your OpenAI API key and other settings"
 fi
 

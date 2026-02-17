@@ -15,6 +15,7 @@ from services.vector_db import VectorDatabase
 from services.llm_service import HybridLLMService, LLMResponse
 from utils.prompts import PromptTemplates
 from utils.config import settings
+from utils.prompt_guard import detect_injection
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +157,24 @@ class QueryHandler:
                     'status': 'success',
                     'citations': [],
                     'tldr': (demo_response[:157] + '...') if len(demo_response) > 160 else demo_response,
+                }
+
+            # Prompt injection guard: reject or pass through based on config
+            injected, _ = detect_injection(query)
+            if getattr(settings, 'reject_on_injection', False) and injected:
+                logger.warning("Prompt injection pattern detected; rejecting request")
+                safe_msg = "I can only answer questions about the course materials. Please ask something about the content you're learning."
+                self._add_to_history(query, 'user', user_id)
+                self._add_to_history(safe_msg, 'assistant', user_id)
+                return {
+                    'response': safe_msg,
+                    'query': query,
+                    'user_id': user_id,
+                    'timestamp': datetime.now().isoformat(),
+                    'context_chunks_used': 0,
+                    'status': 'success',
+                    'citations': [],
+                    'tldr': safe_msg[:160],
                 }
             
             # Store query in conversation history
@@ -561,6 +580,28 @@ class QueryHandler:
                     'tldr': tldr,
                 }
 
+            # Prompt injection guard
+            injected, _ = detect_injection(query)
+            if getattr(settings, 'reject_on_injection', False) and injected:
+                logger.warning("Prompt injection pattern detected; rejecting request (metadata)")
+                safe_msg = "I can only answer questions about the course materials. Please ask something about the content you're learning."
+                self._add_to_history(query, 'user', user_id)
+                self._add_to_history(safe_msg, 'assistant', user_id)
+                return {
+                    'response': safe_msg,
+                    'query': query,
+                    'user_id': user_id,
+                    'timestamp': datetime.now().isoformat(),
+                    'context_chunks_used': 0,
+                    'status': 'success',
+                    'llm_provider': 'none',
+                    'llm_model': 'none',
+                    'llm_usage': {},
+                    'llm_metadata': {},
+                    'citations': [],
+                    'tldr': safe_msg[:160],
+                }
+
             self._add_to_history(query, 'user', user_id)
 
             context_chunks = await self._get_relevant_context(query)
@@ -824,6 +865,28 @@ class QueryHandler:
                 }
                 await manager.send_personal_message(json.dumps(complete_msg), websocket)
                 return
+
+            # Prompt injection guard (streaming)
+            injected, _ = detect_injection(query)
+            if getattr(settings, 'reject_on_injection', False) and injected:
+                logger.warning("Prompt injection pattern detected; rejecting request (streaming)")
+                safe_msg = "I can only answer questions about the course materials. Please ask something about the content you're learning."
+                self._add_to_history(safe_msg, 'assistant', user_id)
+                await manager.send_personal_message(
+                    json.dumps({"type": "chunk", "content": safe_msg, "timestamp": datetime.now().isoformat()}),
+                    websocket
+                )
+                await manager.send_personal_message(
+                    json.dumps({
+                        "type": "complete",
+                        "message": "Response complete",
+                        "timestamp": datetime.now().isoformat(),
+                        "citations": [],
+                        "tldr": safe_msg[:160],
+                    }),
+                    websocket
+                )
+                return
             
             # Send context retrieval message
             context_msg = {
@@ -968,9 +1031,8 @@ class QueryHandler:
             # Use hybrid LLM service for streaming
             full_response = ""
             
-            # Debug: Log the prompt being sent to LLM (but don't stream it)
-            logger.info(f"Sending prompt to LLM (length: {len(prompt)})")
-            logger.debug(f"Prompt content: {prompt[:200]}...")
+            # Log only prompt length to avoid leaking prompt content to logs
+            logger.info("Sending prompt to LLM (length: %d)", len(prompt))
             
             async for chunk in self.llm_service.generate_streaming_response(
                 messages=messages,
@@ -1027,9 +1089,7 @@ class QueryHandler:
             # Store response in conversation history
             self._add_to_history(full_response, 'assistant', None)
             
-            # Debug: Log the final response
-            logger.info(f"Streamed response complete (length: {len(full_response)})")
-            logger.debug(f"Final response: {full_response[:200]}...")
+            logger.info("Streamed response complete (length: %d)", len(full_response))
             
         except Exception as e:
             logger.error(f"Failed to generate streaming response: {e}")

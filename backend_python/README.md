@@ -56,7 +56,7 @@ FastAPI Backend (Python)
    pip install -r requirements.txt
    
    # Configure environment
-   cp env.example .env
+   cp .env.example .env
    # Edit .env with your OpenAI API key
    
    # Start server
@@ -73,7 +73,12 @@ OPENAI_API_KEY=your_openai_api_key_here
 # Optional: Customize settings
 CHUNK_SIZE=1000
 CHUNK_OVERLAP=200
+
+# Security: reject messages with prompt-injection patterns (optional)
+REJECT_ON_INJECTION=false
 ```
+
+**Security:** Rate limits apply to chat and upload. Set `REJECT_ON_INJECTION=true` to reject prompt-injection attempts with a safe message. See `utils/prompt_guard.py` and root [README](../README.md#security).
 
 ## 💡 Session Memory (Per-Session Conversation Chaining)
 

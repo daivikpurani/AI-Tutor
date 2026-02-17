@@ -3,19 +3,27 @@ Pydantic Models and Schemas
 Data models for API requests and responses.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 class ChatRequest(BaseModel):
     """Request model for chat endpoint."""
-    message: str = Field(..., description="User's message or question")
-    user_id: Optional[str] = Field(None, description="Unique user identifier")
+    message: str = Field(..., description="User's message or question", max_length=2000)
+    user_id: Optional[str] = Field(None, description="Unique user identifier", max_length=50)
     conversation_history: Optional[List[Dict[str, Any]]] = Field(
-        None, 
-        description="Previous conversation context"
+        None,
+        description="Previous conversation context",
+        max_length=20,
     )
-    mode: Optional[str] = Field("exploration", description="Learning mode: 'exploration' or 'assessment'")
+    mode: Optional[str] = Field("exploration", description="Learning mode: 'exploration' or 'assessment'", max_length=20)
+
+    @field_validator("conversation_history")
+    @classmethod
+    def conversation_history_max_items(cls, v: Optional[List[Dict[str, Any]]]) -> Optional[List[Dict[str, Any]]]:
+        if v is not None and len(v) > 20:
+            raise ValueError("conversation_history must contain at most 20 entries")
+        return v
 
 class ChatResponse(BaseModel):
     """Response model for chat endpoint."""

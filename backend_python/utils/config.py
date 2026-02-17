@@ -115,6 +115,10 @@ class Settings(BaseSettings):
     # Security Configuration
     secret_key: str = "your-secret-key-change-in-production"
     access_token_expire_minutes: int = 30
+    rate_limit_chat: str = "60/minute"
+    rate_limit_upload: str = "10/minute"
+    # Prompt security: if True, reject requests when injection patterns detected
+    reject_on_injection: bool = False
     
     class Config:
         env_file = ".env"

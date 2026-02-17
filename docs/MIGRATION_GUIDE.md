@@ -34,7 +34,7 @@ backend_python/
 ├── main.py                 # FastAPI application entry point
 ├── requirements.txt        # Python dependencies
 ├── start.sh               # Startup script
-├── env.example            # Environment configuration template
+├── .env.example            # Environment configuration template
 ├── services/
 │   ├── query_handler.py   # Enhanced query processing with LLM
 │   ├── vector_db.py       # ChromaDB integration
@@ -107,7 +107,7 @@ backend_python/
    pip install -r requirements.txt
    
    # Copy environment file
-   cp env.example .env
+   cp .env.example .env
    
    # Start server
    python main.py

@@ -63,12 +63,12 @@ print_success "Node.js version check passed: $(node --version)"
 # Check if .env file exists in backend
 if [ ! -f "backend_python/.env" ]; then
     print_warning ".env file not found in backend_python/"
-    if [ -f "backend_python/env.example" ]; then
-        print_status "Copying env.example to .env..."
-        cp backend_python/env.example backend_python/.env
+    if [ -f "backend_python/.env.example" ]; then
+        print_status "Copying .env.example to .env..."
+        cp backend_python/.env.example backend_python/.env
         print_warning "Please update backend_python/.env with your OpenAI API key"
     else
-        print_error "env.example file not found. Please create .env file manually"
+        print_error ".env.example file not found. Please create .env file manually"
         exit 1
     fi
 fi

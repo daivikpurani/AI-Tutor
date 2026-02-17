@@ -818,21 +818,3 @@ For questions, issues, or contributions, please refer to the main project docume
 **Last Updated**: January 2025  
 **Version**: 1.0  
 **Maintainer**: AI-Tutor Development Team
-```
-
-This document covers:
-- Overview and research foundations
-- System architecture and components
-- Evaluation frameworks
-- Dataset structure
-- Usage guide
-- Report interpretation
-- Advanced configuration
-- Troubleshooting
-- Research references
-
-Since you're in ask mode, I can't create the file directly. You can:
-1. Create the file at `docs/BENCHMARK_COMPREHENSIVE_GUIDE.md` and paste the content above
-2. Switch to agent mode and I'll create it for you
-
-Should I create it, or do you want to review the content first?

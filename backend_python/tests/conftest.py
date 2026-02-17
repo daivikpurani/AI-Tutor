@@ -61,6 +61,22 @@ class FakeQueryHandler:
             "status": "success",
         }
 
+    async def process_query_with_metadata(self, query: str, user_id: str = None, conversation_history=None, mode: str = "exploration"):
+        return {
+            "response": f"Echo: {query}",
+            "query": query,
+            "user_id": user_id,
+            "timestamp": "2024-01-01T00:00:00",
+            "context_chunks_used": 1,
+            "status": "success",
+            "llm_provider": "mock",
+            "llm_model": "mock",
+            "llm_usage": {},
+            "llm_metadata": {},
+            "citations": [],
+            "tldr": f"Echo: {query}"[:160],
+        }
+
     async def process_query_streaming(self, query: str, user_id: str = None, websocket=None, manager=None, mode: str = "exploration"):
         await manager.send_personal_message(json.dumps({
             "type": "chunk",

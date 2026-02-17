@@ -52,7 +52,7 @@ Outcomes:
 ### 2.5 Documentation and Developer Experience
 
 - Canonical documentation and developer references centralized in `FinalProject/README.md` and `FinalProject/docs/DEVELOPER.md`.
-- Startup scripts and guides (`start.sh`, `start-dev.sh`, `docs/STARTUP-GUIDE.md`) streamline setup, environment checks, and daily workflow.
+- Startup scripts and guides (`start.sh`, `start-dev.sh`, `QUICK_START.md`, `docs/DEVELOPER.md`) streamline setup, environment checks, and daily workflow.
 
 ## 3. Iterations and Design Decisions
 
@@ -120,7 +120,7 @@ Project documentation and guides:
 - `FinalProject/README.md` — system overview, features, setup, endpoints
 - `FinalProject/docs/DEVELOPER.md` — developer workflow, environment, scripts, testing
 - `FinalProject/docs/MIGRATION_GUIDE.md` — Node.js → FastAPI + ChromaDB migration
-- `FinalProject/docs/STARTUP-GUIDE.md` — startup methods, URLs, troubleshooting
+- `FinalProject/QUICK_START.md`, `FinalProject/docs/DEVELOPER.md` — startup methods, URLs, troubleshooting
 - `FinalProject/docs/WebSocket-Testing-Guide.md` — WebSocket testing patterns
 - `FinalProject/docs/hybrid-latency-cost.md` — measurement plan and trade-offs
 - `FinalProject/docs/ARCHITECTURE_DIAGRAMS.md` — Mermaid diagrams (context, container, component, sequences)
@@ -164,6 +164,6 @@ AI-Tutor evolved from a multi-language prototype with external dependencies into
 ## Appendix B: Reproducibility Notes
 
 - Persisted vector store under `FinalProject/backend_python/chroma_db/`
-- Environment variables managed via `backend_python/env.example`
+- Environment variables managed via `backend_python/.env.example`
 - Deterministic chunking parameters: `CHUNK_SIZE`, `CHUNK_OVERLAP`
 - Local-first evaluation recommended prior to cloud deployment

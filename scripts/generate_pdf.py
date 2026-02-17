@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Generate PDF from Markdown documentation.
-Converts BENCHMARK_COMPREHENSIVE_GUIDE.md to PDF format.
+Converts BENCHMARK_DETAILED.md to PDF format.
 """
 
 import os
@@ -172,14 +172,14 @@ def main():
     project_root = script_dir.parent
     
     # Input markdown file
-    md_file = project_root / "docs" / "BENCHMARK_COMPREHENSIVE_GUIDE.md"
+    md_file = project_root / "docs" / "BENCHMARK_DETAILED.md"
     
     # Output PDF file
-    output_pdf = project_root / "docs" / "BENCHMARK_COMPREHENSIVE_GUIDE.pdf"
+    output_pdf = project_root / "docs" / "BENCHMARK_DETAILED.pdf"
     
     if not md_file.exists():
         print(f"✗ Markdown file not found: {md_file}")
-        print("\nPlease create BENCHMARK_COMPREHENSIVE_GUIDE.md first.")
+        print("\nPlease create BENCHMARK_DETAILED.md first.")
         return 1
     
     print(f"Converting: {md_file}")

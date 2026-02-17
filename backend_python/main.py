@@ -21,6 +21,9 @@ import uvicorn
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Union
 import json
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +35,18 @@ from services.llm_service import HybridLLMService, LLMProvider
 from services.relevance_scorer import RelevanceScorer
 from models.schemas import ChatRequest, ChatResponse, UploadResponse, HealthResponse, SearchRequest, SearchResponse, MultipleUploadResponse, FileUploadResult
 from utils.config import settings
+from utils.filename_sanitizer import sanitize_filename
+
+
+def _error_detail(msg: str, status: int = 500) -> str:
+    """Return generic message in production for 5xx errors to avoid leaking internal details."""
+    if settings.environment == "production" and status >= 500:
+        return "An error occurred. Please try again later."
+    return msg
+
+
+# Rate limiter
+limiter = Limiter(key_func=get_remote_address)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -41,6 +56,8 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS middleware
 app.add_middleware(
@@ -104,21 +121,22 @@ async def health_check():
     )
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest):
+@limiter.limit(settings.rate_limit_chat)
+async def chat_endpoint(request: Request, chat_request: ChatRequest):
     """Main chat endpoint for processing user queries."""
     try:
         # Process query through the query handler with metadata for richer response
         result = await query_handler.process_query_with_metadata(
-            query=request.message,
-            user_id=request.user_id,
-            conversation_history=request.conversation_history,
-            mode=request.mode
+            query=chat_request.message,
+            user_id=chat_request.user_id,
+            conversation_history=chat_request.conversation_history,
+            mode=chat_request.mode
         )
 
         return ChatResponse(
             response=result.get("response", ""),
-            query=request.message,
-            user_id=request.user_id,
+            query=chat_request.message,
+            user_id=chat_request.user_id,
             timestamp=result.get("timestamp", datetime.now().isoformat()),
             context_chunks_used=result.get("context_chunks_used", 0),
             status=result.get("status", "success"),
@@ -131,23 +149,27 @@ async def chat_endpoint(request: ChatRequest):
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
+        logger.error("Error processing query: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=_error_detail(f"Error processing query: {str(e)}", 500))
 
 @app.post("/api/chat_benchmark")
-async def chat_benchmark_endpoint(request: ChatRequest):
+@limiter.limit(settings.rate_limit_chat)
+async def chat_benchmark_endpoint(request: Request, chat_request: ChatRequest):
     """Benchmark chat endpoint: returns response plus provider/model/usage/metadata."""
     try:
         result = await query_handler.process_query_with_metadata(
-            query=request.message,
-            user_id=request.user_id,
-            conversation_history=request.conversation_history,
-            mode=request.mode
+            query=chat_request.message,
+            user_id=chat_request.user_id,
+            conversation_history=chat_request.conversation_history,
+            mode=chat_request.mode
         )
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing benchmark query: {str(e)}")
+        logger.error("Error processing benchmark query: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=_error_detail(f"Error processing benchmark query: {str(e)}", 500))
 
 @app.post("/api/upload")
+@limiter.limit(settings.rate_limit_upload)
 async def upload_file(request: Request):
     """
     Upload and process one or multiple documents for vector database.
@@ -202,8 +224,12 @@ async def upload_file(request: Request):
         file = files[0]
         file_path = None
         try:
+            safe_filename = sanitize_filename(file.filename, settings.allowed_file_types, require_extension=True)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        try:
             # Save uploaded file temporarily
-            file_path = f"temp_uploads/{file.filename}"
+            file_path = f"temp_uploads/{safe_filename}"
             os.makedirs("temp_uploads", exist_ok=True)
             
             with open(file_path, "wb") as buffer:
@@ -214,15 +240,15 @@ async def upload_file(request: Request):
             chunks = document_chunker.chunk_file(file_path)
             
             # Store chunks in vector database
-            await vector_db.add_documents(chunks, file.filename)
+            await vector_db.add_documents(chunks, safe_filename)
             
             # Clean up temporary file
             if os.path.exists(file_path):
                 os.remove(file_path)
             
             return UploadResponse(
-                message=f"Successfully processed {file.filename}",
-                filename=file.filename,
+                message=f"Successfully processed {safe_filename}",
+                filename=safe_filename,
                 chunks_created=len(chunks),
                 status="success"
             )
@@ -234,7 +260,8 @@ async def upload_file(request: Request):
                     os.remove(file_path)
                 except:
                     pass
-            raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+            logger.error("Upload failed (single file): %s", e, exc_info=True)
+            raise HTTPException(status_code=500, detail=_error_detail(f"Upload failed: {str(e)}", 500))
     
     # Multiple files upload - return detailed response
     results = []
@@ -244,8 +271,20 @@ async def upload_file(request: Request):
     for file in files:
         file_path = None
         try:
+            safe_filename = sanitize_filename(file.filename, settings.allowed_file_types, require_extension=True)
+        except ValueError as e:
+            results.append(FileUploadResult(
+                filename=file.filename or "unknown",
+                chunks_created=0,
+                status="error",
+                error=str(e)
+            ))
+            failed += 1
+            logger.error(f"Invalid filename {file.filename}: {e}")
+            continue
+        try:
             # Save uploaded file temporarily
-            file_path = f"temp_uploads/{file.filename}"
+            file_path = f"temp_uploads/{safe_filename}"
             os.makedirs("temp_uploads", exist_ok=True)
             
             with open(file_path, "wb") as buffer:
@@ -256,19 +295,19 @@ async def upload_file(request: Request):
             chunks = document_chunker.chunk_file(file_path)
             
             # Store chunks in vector database
-            await vector_db.add_documents(chunks, file.filename)
+            await vector_db.add_documents(chunks, safe_filename)
             
             # Clean up temporary file
             if os.path.exists(file_path):
                 os.remove(file_path)
             
             results.append(FileUploadResult(
-                filename=file.filename,
+                filename=safe_filename,
                 chunks_created=len(chunks),
                 status="success"
             ))
             successful += 1
-            logger.info(f"Successfully processed {file.filename}: {len(chunks)} chunks")
+            logger.info(f"Successfully processed {safe_filename}: {len(chunks)} chunks")
             
         except Exception as e:
             # Clean up temporary file if it exists
@@ -278,15 +317,15 @@ async def upload_file(request: Request):
                 except:
                     pass
             
-            error_msg = str(e)
+            error_msg = _error_detail(str(e), 500)
             results.append(FileUploadResult(
-                filename=file.filename,
+                filename=safe_filename,
                 chunks_created=0,
                 status="error",
                 error=error_msg
             ))
             failed += 1
-            logger.error(f"Failed to process {file.filename}: {error_msg}")
+            logger.error("Failed to process %s: %s", safe_filename, e, exc_info=True)
     
     return MultipleUploadResponse(
         message=f"Processed {len(files)} files: {successful} successful, {failed} failed",
@@ -297,7 +336,9 @@ async def upload_file(request: Request):
     )
 
 @app.post("/api/upload-direct")
+@limiter.limit(settings.rate_limit_upload)
 async def upload_document_direct(
+    request: Request,
     text: str = Form(...),
     filename: str = Form(...),
     file_type: str = Form("text"),
@@ -314,6 +355,11 @@ async def upload_document_direct(
         if not filename.strip():
             raise HTTPException(status_code=400, detail="Filename cannot be empty")
         
+        try:
+            safe_filename = sanitize_filename(filename, settings.allowed_file_types, require_extension=False)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        
         # Prepare metadata
         metadata = {
             "file_type": file_type,
@@ -324,28 +370,31 @@ async def upload_document_direct(
         # Add document directly to collection
         success = await vector_db.add_document_direct(
             text=text,
-            filename=filename,
+            filename=safe_filename,
             metadata=metadata
         )
         
         if success:
             return {
-                "message": f"Successfully uploaded '{filename}' directly to collection",
-                "filename": filename,
+                "message": f"Successfully uploaded '{safe_filename}' directly to collection",
+                "filename": safe_filename,
                 "content_length": len(text),
                 "status": "success",
                 "timestamp": datetime.now().isoformat()
             }
         else:
-            raise HTTPException(status_code=500, detail="Failed to upload document")
+            raise HTTPException(status_code=500, detail=_error_detail("Failed to upload document", 500))
         
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        logger.error("Upload failed (direct): %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=_error_detail(f"Upload failed: {str(e)}", 500))
 
 @app.post("/api/upload-text")
+@limiter.limit(settings.rate_limit_upload)
 async def upload_text_content(
+    request: Request,
     content: str = Form(...),
     title: str = Form(...),
     description: str = Form(""),
@@ -362,8 +411,12 @@ async def upload_text_content(
         if not title.strip():
             raise HTTPException(status_code=400, detail="Title cannot be empty")
         
-        # Create filename from title
-        filename = f"{title.replace(' ', '_').lower()}.txt"
+        # Create filename from title and sanitize
+        raw_filename = f"{title.replace(' ', '_').lower()}.txt"
+        try:
+            filename = sanitize_filename(raw_filename, settings.allowed_file_types, require_extension=True)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         
         # Prepare metadata
         metadata = {
@@ -393,12 +446,13 @@ async def upload_text_content(
                 "timestamp": datetime.now().isoformat()
             }
         else:
-            raise HTTPException(status_code=500, detail="Failed to upload text content")
+            raise HTTPException(status_code=500, detail=_error_detail("Failed to upload text content", 500))
         
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        logger.error("Upload failed (text): %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=_error_detail(f"Upload failed: {str(e)}", 500))
 
 @app.get("/api/documents")
 async def list_documents():
@@ -407,7 +461,8 @@ async def list_documents():
         documents = await vector_db.list_documents()
         return {"documents": documents}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error listing documents: {str(e)}")
+        logger.error("Error listing documents: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=_error_detail(f"Error listing documents: {str(e)}", 500))
 
 @app.get("/api/db-stats")
 async def get_database_stats():
@@ -416,7 +471,8 @@ async def get_database_stats():
         stats = await vector_db.get_database_stats()
         return stats
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting database stats: {str(e)}")
+        logger.error("Error getting database stats: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=_error_detail(f"Error getting database stats: {str(e)}", 500))
 
 @app.post("/api/search", response_model=SearchResponse)
 async def search_documents(request: SearchRequest):
@@ -451,7 +507,8 @@ async def search_documents(request: SearchRequest):
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error searching documents: {str(e)}")
+        logger.error("Error searching documents: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=_error_detail(f"Error searching documents: {str(e)}", 500))
 
 @app.get("/api/test-db")
 async def test_database_connection():
@@ -474,7 +531,7 @@ async def test_database_connection():
         except Exception as e:
             test_results["tests"]["health_check"] = {
                 "status": "failed",
-                "error": str(e)
+                "error": _error_detail(str(e), 500)
             }
         
         # Test 2: List documents
@@ -488,7 +545,7 @@ async def test_database_connection():
         except Exception as e:
             test_results["tests"]["list_documents"] = {
                 "status": "failed",
-                "error": str(e)
+                "error": _error_detail(str(e), 500)
             }
         
         # Test 3: Test search functionality
@@ -504,7 +561,7 @@ async def test_database_connection():
         except Exception as e:
             test_results["tests"]["search_functionality"] = {
                 "status": "failed",
-                "error": str(e)
+                "error": _error_detail(str(e), 500)
             }
         
         # Test 4: Test query handler
@@ -521,7 +578,7 @@ async def test_database_connection():
         except Exception as e:
             test_results["tests"]["query_handler"] = {
                 "status": "failed",
-                "error": str(e)
+                "error": _error_detail(str(e), 500)
             }
         
         # Overall status
@@ -531,10 +588,11 @@ async def test_database_connection():
         return test_results
         
     except Exception as e:
+        logger.error("Test DB failed: %s", e, exc_info=True)
         return {
             "database_status": "error",
             "timestamp": datetime.now().isoformat(),
-            "error": str(e),
+            "error": _error_detail(str(e), 500),
             "overall_status": "failed"
         }
 
@@ -560,10 +618,11 @@ async def test_query_endpoint(request: ChatRequest):
         }
         
     except Exception as e:
+        logger.error("Test query failed: %s", e, exc_info=True)
         return {
             "test_status": "error",
             "query": request.message,
-            "error": str(e),
+            "error": _error_detail(str(e), 500),
             "timestamp": datetime.now().isoformat()
         }
 
@@ -574,7 +633,8 @@ async def delete_document(document_id: str):
         await vector_db.delete_document(document_id)
         return {"message": f"Document {document_id} deleted successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deleting document: {str(e)}")
+        logger.error("Error deleting document: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=_error_detail(f"Error deleting document: {str(e)}", 500))
 
 @app.post("/api/backup-db")
 async def backup_database():
@@ -591,9 +651,10 @@ async def backup_database():
                 "timestamp": datetime.now().isoformat()
             }
         else:
-            raise HTTPException(status_code=500, detail="Failed to create backup")
+            raise HTTPException(status_code=500, detail=_error_detail("Failed to create backup", 500))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Backup failed: {str(e)}")
+        logger.error("Backup failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=_error_detail(f"Backup failed: {str(e)}", 500))
 
 @app.post("/api/reset-db")
 async def reset_database():
@@ -606,9 +667,10 @@ async def reset_database():
                 "timestamp": datetime.now().isoformat()
             }
         else:
-            raise HTTPException(status_code=500, detail="Failed to reset database")
+            raise HTTPException(status_code=500, detail=_error_detail("Failed to reset database", 500))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")
+        logger.error("Reset failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=_error_detail(f"Reset failed: {str(e)}", 500))
 
 # Benchmark API endpoints
 @app.get("/api/benchmark/models")
@@ -634,7 +696,8 @@ async def get_benchmark_models():
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting models: {str(e)}")
+        logger.error("Error getting benchmark models: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=_error_detail(f"Error getting models: {str(e)}", 500))
 
 @app.post("/api/benchmark/run")
 async def run_benchmark_endpoint(
@@ -744,7 +807,8 @@ async def run_benchmark_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Benchmark failed: {str(e)}")
+        logger.error("Benchmark failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=_error_detail(f"Benchmark failed: {str(e)}", 500))
 
 @app.post("/api/benchmark/compare")
 async def compare_models_endpoint(
@@ -884,7 +948,8 @@ async def compare_models_endpoint(
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Comparison failed: {str(e)}")
+        logger.error("Benchmark comparison failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=_error_detail(f"Comparison failed: {str(e)}", 500))
 
 # WebSocket endpoint for real-time chat with streaming
 @app.websocket("/ws/chat")
