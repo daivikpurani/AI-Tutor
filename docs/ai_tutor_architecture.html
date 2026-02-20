@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI-Tutor Architecture – Quick Reference</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; background: #fafafa; }
+    h1 { font-size: 1.25rem; margin-bottom: 8px; }
+    .subtitle { color: #666; font-size: 0.875rem; margin-bottom: 16px; }
+    #diagram { background: white; padding: 24px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: auto; }
+    .mermaid { display: flex; justify-content: center; }
+    .example { margin-top: 20px; padding: 12px 16px; background: #f5f5f5; border-radius: 6px; border-left: 4px solid #6c8ebf; font-size: 0.875rem; }
+    .drawio-note { margin-top: 16px; font-size: 0.8rem; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>AI-Tutor Architecture – Quick Reference</h1>
+  <p class="subtitle">Single-page reference: Ingestion → Query Preprocessing → Retrieval & Reranking → Hybrid LLM Routing</p>
+  <div id="diagram">
+    <pre class="mermaid">
+flowchart TB
+  subgraph s1["1. INGESTION LAYER"]
+    A1[File Upload: .txt .md .pdf .docx .doc  max 10MB]
+    A2[Text Extraction: PyPDF2 / python-docx / direct read]
+    A3[Chunking: Semantic or Default boundaries]
+    A3p["chunk_size=1500  chunk_overlap=200"]
+    A4[Embedding: all-MiniLM-L6-v2]
+    A5[Storage: ChromaDB  ai_tutor_documents]
+    A1 --> A2 --> A3 --> A4 --> A5
+    A3 -.-> A3p
+  end
+
+  subgraph s2["2. QUERY PREPROCESSING"]
+    B1[Demo check: hardcoded RAG Q&A]
+    B2[Injection guard: detect_injection]
+    B3["Query compression: Ollama  last 8 msgs  max 600 chars"]
+    B4[Multi-query: optional 2-3 variants via Ollama]
+    B1 --> B2 --> B3 --> B4
+  end
+
+  subgraph s3["3. RETRIEVAL AND RERANKING"]
+    C1["Vector search: top_k=12  distance &lt; 2.0"]
+    C2["Reranking: ms-marco-MiniLM-L-6-v2  higher=better"]
+    C3[Rerank output: top 6 chunks]
+    C4[Doc selection: best-matching doc only]
+    C5["Quality: good if sim &gt; 0.40 or dist &lt; 2.5"]
+    C6["Context build: max 4500 chars  Context N from filename"]
+    C1 --> C2 --> C3 --> C4 --> C5 --> C6
+  end
+
+  subgraph s4["4. HYBRID LLM ROUTING"]
+    D1[Mode: Exploration vs Assessment]
+    D2["Exploration: max_ctx=2500 max_gen=400 temp=0.7  Assessment: 6000 600 0.2"]
+    D3[Provider order: Ollama then OpenAI then Mock]
+    D4[Draft: always try Ollama first]
+    D5[Self-check: confidence + missing citations]
+    D6["Escalation: conf &lt; 0.72 or &lt; 0.55 OR missing cites → OpenAI"]
+    D7[Complexity: Simple/Complex/Unknown for streaming]
+    D1 --> D3 --> D4 --> D5 --> D6 --> D7
+    D1 -.-> D2
+  end
+
+  B4 --> C1
+  C6 --> D1
+    </pre>
+  </div>
+  <div class="example">
+    <strong>Example:</strong> 5000-char doc → ~4 chunks (1500 chars, 200 overlap). Query "what is RAG" → 12 candidates → rerank → top 6 → context ~4500 chars → Ollama draft → if conf &lt; 0.55, escalate to GPT-4o-mini.
+  </div>
+  <p class="drawio-note">For draw.io editing: open <code>docs/ai_tutor_architecture.drawio</code> in <a href="https://app.diagrams.net">diagrams.net</a> or VS Code Draw.io extension. Export to PNG/PDF for interviews.</p>
+
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'neutral', flowchart: { useMaxWidth: true, htmlLabels: true } });
+  </script>
+</body>
+</html>

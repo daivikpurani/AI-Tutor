@@ -2,6 +2,8 @@
 
 This document contains comprehensive Mermaid diagrams illustrating the architecture of the AI-Tutor system, a hybrid LLM-powered educational platform with vector database integration.
 
+**Quick reference (single-page):** [AI-Tutor Architecture draw.io](ai_tutor_architecture.drawio) — open in [diagrams.net](https://app.diagrams.net) or VS Code Draw.io extension. [HTML view](ai_tutor_architecture.html) for browser/print.
+
 ## Table of Contents
 1. [System Context Diagram](#1-system-context-diagram)
 2. [Container Diagram](#2-container-diagram)

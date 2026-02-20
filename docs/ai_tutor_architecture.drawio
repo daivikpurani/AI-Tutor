@@ -1,0 +1,162 @@
+<mxfile host="app.diagrams.net" modified="2025-01-01T00:00:00.000Z" agent="AI-Tutor" version="22.0.0" etag="arch" type="device">
+  <diagram name="AI-Tutor Architecture" id="arch-page">
+    <mxGraphModel dx="1200" dy="2000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="2000" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="s1-header" value="1. INGESTION LAYER" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="20" y="20" width="380" height="36" as="geometry"/>
+        </mxCell>
+        <mxCell id="s1-upload" value="File Upload&#xa;.txt .md .pdf .docx .doc  max 10MB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="20" y="70" width="200" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="s1-extract" value="Text Extraction&#xa;PyPDF2 (PDF)  python-docx (Word)  direct read (txt/md)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="20" y="128" width="280" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="s1-chunk" value="Chunking&#xa;Semantic: RecursiveCharacterTextSplitter  ## ### \n\n . &#xa;Default: para &gt; section &gt; sentence" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="20" y="186" width="320" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="s1-params" value="chunk_size=1500&#xa;chunk_overlap=200" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="360" y="186" width="120" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="s1-embed" value="Embedding&#xa;all-MiniLM-L6-v2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="20" y="252" width="200" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="s1-store" value="Storage&#xa;ChromaDB  collection: ai_tutor_documents" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="20" y="310" width="260" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1a" value="" edge="1" parent="1" source="s1-upload" target="s1-extract">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1b" value="" edge="1" parent="1" source="s1-extract" target="s1-chunk">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1c" value="" edge="1" parent="1" source="s1-chunk" target="s1-embed">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1d" value="" edge="1" parent="1" source="s1-embed" target="s1-store">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Section 2: Query Preprocessing -->
+        <mxCell id="s2-header" value="2. QUERY PREPROCESSING" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="20" y="380" width="380" height="36" as="geometry"/>
+        </mxCell>
+        <mxCell id="s2-demo" value="Demo check&#xa;Hardcoded RAG Q&amp;A for specific questions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="20" y="430" width="240" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="s2-inject" value="Injection guard&#xa;Optional reject via detect_injection" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="20" y="488" width="220" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="s2-compress" value="Query compression&#xa;LLM (Ollama) query + last 8 msgs → max 600 chars" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="20" y="546" width="300" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="s2-multi" value="Multi-query&#xa;Optional: 2–3 variants via Ollama" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="20" y="604" width="220" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2a" value="" edge="1" parent="1" source="s2-demo" target="s2-inject">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2b" value="" edge="1" parent="1" source="s2-inject" target="s2-compress">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2c" value="" edge="1" parent="1" source="s2-compress" target="s2-multi">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Section 3: Retrieval and Reranking -->
+        <mxCell id="s3-header" value="3. RETRIEVAL AND RERANKING" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="20" y="672" width="380" height="36" as="geometry"/>
+        </mxCell>
+        <mxCell id="s3-vector" value="Vector search&#xa;ChromaDB  top_k=12  distance threshold &lt; 2.0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="20" y="722" width="280" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="s3-rerank" value="Reranking&#xa;Cross-encoder ms-marco-MiniLM-L-6-v2  higher score = better" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="20" y="780" width="340" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="s3-top6" value="Rerank output&#xa;Top 6 chunks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="20" y="838" width="160" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="s3-docsel" value="Doc selection&#xa;Multiple docs → keep chunks from best-matching doc only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="20" y="896" width="340" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="s3-quality" value="Quality assessment&#xa;good: sim &gt; 0.40 or dist &lt; 2.5  moderate/poor thresholds" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="20" y="954" width="360" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="s3-ctx" value="Context build&#xa;max_context_chars=4500  Context N (from filename): text" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1012" width="360" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3a" value="" edge="1" parent="1" source="s3-vector" target="s3-rerank">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3b" value="" edge="1" parent="1" source="s3-rerank" target="s3-top6">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3c" value="" edge="1" parent="1" source="s3-top6" target="s3-docsel">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3d" value="" edge="1" parent="1" source="s3-docsel" target="s3-quality">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3e" value="" edge="1" parent="1" source="s3-quality" target="s3-ctx">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Section 4: Hybrid LLM Routing -->
+        <mxCell id="s4-header" value="4. HYBRID LLM ROUTING" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1080" width="380" height="36" as="geometry"/>
+        </mxCell>
+        <mxCell id="s4-mode" value="Mode: Exploration vs Assessment (from API/chat)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1130" width="340" height="36" as="geometry"/>
+        </mxCell>
+        <mxCell id="s4-modeparams" value="Exploration: max_ctx=2500 max_gen=400 temp=0.7&#xa;Assessment: max_ctx=6000 max_gen=600 temp=0.2" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacingLeft=6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="380" y="1126" width="280" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="s4-provider" value="Provider order: Ollama → OpenAI → Mock (all complexity)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1182" width="380" height="36" as="geometry"/>
+        </mxCell>
+        <mxCell id="s4-draft" value="Draft: Always try Ollama first" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1232" width="260" height="36" as="geometry"/>
+        </mxCell>
+        <mxCell id="s4-selfcheck" value="Self-check: confidence + missing citations (assessment)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1282" width="380" height="36" as="geometry"/>
+        </mxCell>
+        <mxCell id="s4-escalate" value="Escalation: conf &lt; 0.72 (assessment) or &lt; 0.55 (exploration)&#xa;OR missing citations → OpenAI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1332" width="400" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="s4-complexity" value="Complexity: Simple/Complex/Unknown (keywords patterns length)&#xa;Used for streaming routing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1390" width="400" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4a" value="" edge="1" parent="1" source="s4-mode" target="s4-provider">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4b" value="" edge="1" parent="1" source="s4-provider" target="s4-draft">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4c" value="" edge="1" parent="1" source="s4-draft" target="s4-selfcheck">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4d" value="" edge="1" parent="1" source="s4-selfcheck" target="s4-escalate">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4e" value="" edge="1" parent="1" source="s4-escalate" target="s4-complexity">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Flow from section 2 to 3 -->
+        <mxCell id="e23" value="" edge="1" parent="1" source="s2-multi" target="s3-vector">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <!-- Flow from section 3 to 4 -->
+        <mxCell id="e34" value="" edge="1" parent="1" source="s3-ctx" target="s4-mode">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Example callout -->
+        <mxCell id="example-box" value="Example: 5000-char doc → ~4 chunks (1500 chars 200 overlap). Query &quot;what is RAG&quot; → 12 candidates → rerank → top 6 → context ~4500 chars → Ollama draft → if conf &lt; 0.55 escalate to GPT-4o-mini." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=2;align=left;spacingLeft=8;spacingRight=8;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1480" width="680" height="56" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
