@@ -112,13 +112,16 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     
+    # Temporary: direct OpenAI only (no RAG, no hybrid routing); stream from OpenAI
+    direct_openai_streaming: bool = True
+
     # Security Configuration
     secret_key: str = "your-secret-key-change-in-production"
     access_token_expire_minutes: int = 30
     rate_limit_chat: str = "60/minute"
     rate_limit_upload: str = "10/minute"
     # Prompt security: if True, reject requests when injection patterns detected
-    reject_on_injection: bool = False
+    reject_on_injection: bool = True
     
     class Config:
         env_file = ".env"

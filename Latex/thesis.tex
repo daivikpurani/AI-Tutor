@@ -1,0 +1,339 @@
+% Master's Thesis for AI‑Tutor Project
+% Auto-generated initial draft based on codebase and docs
+
+\documentclass[12pt,oneside]{report}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{csquotes}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{setspace}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\onehalfspacing
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  citecolor=blue,
+  urlcolor=blue
+}
+
+\lstdefinestyle{code}{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  keywordstyle=\bfseries,
+  showstringspaces=false
+}
+
+% Adjust these fields to match your university template
+\title{AI‑Tutor: A Retrieval-Augmented, Hybrid LLM Tutoring System with Educational Benchmarking and Security Hardening}
+\author{Purani Daivik Manishkumar}
+\date{March 2026}
+
+\begin{document}
+
+\pagenumbering{roman}
+
+\maketitle
+
+\chapter*{Abstract}
+
+Large language models (LLMs) have shown strong capabilities as conversational assistants, yet generic chat interfaces struggle to provide course-grounded, pedagogically sound tutoring. This thesis presents \emph{AI‑Tutor}, a research-oriented intelligent tutoring system that combines retrieval-augmented generation (RAG) with a hybrid LLM routing architecture, a curated corpus of RAG/AI/ML papers, and a research-grade evaluation suite for educational settings.
+Instructors upload course materials and domain-specific papers, which are chunked, embedded, and stored in a local vector database. Students interact through a real-time chat interface that retrieves relevant context and generates grounded explanations, with the system adaptively routing queries between local and hosted LLM providers to balance cost, latency, and quality.
+
+The work makes three primary contributions. First, it designs and implements an end-to-end RAG-based tutoring platform built on a FastAPI backend, ChromaDB vector store, and React frontend, with modular services for document ingestion, retrieval, hybrid LLM orchestration, and WebSocket-based streaming. Second, it introduces a hybrid routing strategy that uses a query-complexity analyzer, a local Ollama model, and hosted OpenAI models, together with a lightweight self-check mechanism and a planned latency–cost measurement framework. Third, it integrates an Educational Tutoring Benchmark (ETB) pipeline that combines peer-reviewed pedagogical, dialog, and domain-specific evaluation frameworks, and it hardens the system against prompt injection and input abuse via a multi-layer security design.
+
+The resulting system provides a reproducible research platform for studying grounded AI tutoring in technical domains such as RAG, AI, and ML. While the current implementation focuses on architecture, security, and evaluation scaffolding rather than exhaustive experimental campaigns, it establishes a defensible baseline for future empirical studies on model selection, routing policies, and tutoring effectiveness.
+
+\chapter*{Acknowledgements}
+
+The author thanks the project supervisors, collaborators, and peers who provided feedback on the AI‑Tutor design and codebase, as well as the maintainers of FastAPI, ChromaDB, SentenceTransformers, OpenAI, and Ollama for the underlying tooling that made this research possible.
+
+\tableofcontents
+\listoftables
+\listoffigures
+
+\clearpage
+\pagenumbering{arabic}
+
+%--------------------------------------------------------------------
+\chapter{Introduction}
+\label{chap:introduction}
+
+\section{Motivation}
+
+LLMs have rapidly become central to modern knowledge work, offering natural language interfaces for search, summarization, and explanation. In education, they promise personalized tutoring, instant feedback, and scalable support for learners. However, generic chat interfaces suffer from two critical limitations in real courses: a lack of grounding in course-specific materials and limited pedagogical structure. Answers may hallucinate, drift away from the syllabus, or fail to support step-by-step learning.
+
+Retrieval-augmented generation (RAG) has emerged as a practical strategy for mitigating hallucinations by conditioning LLMs on retrieved documents. For tutoring, RAG enables systems to answer questions directly from uploaded lecture notes, assignments, and curated research papers. At the same time, deploying LLM-based tutors in realistic environments introduces engineering and research challenges: managing cost and latency across multiple providers, evaluating educational quality in a principled way, and hardening inputs against adversarial prompts and abuse.
+
+\section{Problem Statement}
+
+The overarching goal of this thesis is to design and implement a research-oriented intelligent tutoring system that:
+\begin{itemize}[leftmargin=*]
+  \item Provides \emph{course-grounded} answers to student questions using retrieval-augmented generation over instructor-provided materials and curated RAG/AI/ML papers.
+  \item Supports both \emph{exploratory} and \emph{assessment-oriented} tutoring modes, with appropriate prompts and evaluation hooks.
+  \item Balances \emph{cost} and \emph{latency} by combining local and hosted LLM providers within a hybrid routing architecture.
+  \item Exposes a \emph{research-grade} benchmarking pipeline for educational evaluation along pedagogical, dialog, and domain-specific dimensions.
+  \item Implements practical \emph{security} and \emph{robustness} mechanisms, particularly for prompt injection and input sanitization.
+\end{itemize}
+
+The core research question can be stated as:
+\begin{quote}
+How can a RAG-based tutoring system be architected, routed, and evaluated to provide grounded, pedagogically meaningful assistance in RAG/AI/ML domains while maintaining practical cost, latency, and security properties?
+\end{quote}
+
+\section{Contributions}
+
+This thesis makes the following technical and research contributions:
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{System architecture and implementation.} A modular FastAPI backend encapsulating a document chunker, ChromaDB-based vector database service, RAG-oriented query handler, and hybrid LLM service, integrated with a React frontend and WebSocket streaming for real-time tutoring.
+  \item \textbf{Hybrid LLM routing with self-check.} A routing layer that prefers local Ollama models for most queries, escalates to hosted OpenAI models when confidence is low or assessment standards demand higher reliability, and attaches routing metadata for downstream analysis.
+  \item \textbf{Educational Tutoring Benchmark (ETB) pipeline.} A benchmark runner and evaluator suite that combines pedagogical, dialog, and domain metrics from peer-reviewed frameworks, together with a dataset schema for single- and multi-turn tutoring scenarios.
+  \item \textbf{Security and robustness hardening.} A four-layer security design that introduces prompt injection detection, strict input sanitization, rate limiting, filename hardening, and production-safe error handling, accompanied by consolidated documentation and configuration.
+  \item \textbf{Research platform framing.} A consolidated narrative and architecture that positions AI‑Tutor as a foundation for future empirical studies on hybrid routing policies, tutoring effectiveness, and security–usability trade-offs.
+\end{enumerate}
+
+\section{Thesis Structure}
+
+The remainder of the thesis is organized as follows.
+Chapter~\ref{chap:background} surveys related work on retrieval-augmented generation, educational AI, hybrid LLM routing, and evaluation frameworks. Chapter~\ref{chap:architecture} describes the system architecture, including ingestion, retrieval, hybrid routing, and frontend integration. Chapter~\ref{chap:implementation} details the implementation of key backend services and configuration, with an emphasis on reproducibility.
+Chapter~\ref{chap:evaluation} presents the design of the Educational Tutoring Benchmark and the planned latency–cost measurement methodology. Chapter~\ref{chap:security} discusses security and robustness measures.
+Chapter~\ref{chap:discussion} synthesizes limitations and future work, and Chapter~\ref{chap:conclusion} concludes.
+
+%--------------------------------------------------------------------
+\chapter{Background and Related Work}
+\label{chap:background}
+
+\section{Retrieval-Augmented Generation}
+
+Retrieval-augmented generation (RAG)~\cite{lewis2020rag} refers to architectures in which an LLM conditions its output on retrieved documents, typically stored in a vector database and indexed with neural embeddings. Subsequent work has expanded this paradigm to in-context retrieval, corrective retrieval, and self-reflective RAG variants~\cite{selfrag,rag20,ragfusion}, exploring trade-offs between retrieval quality, latency, and robustness.
+
+In AI‑Tutor, RAG is used to constrain answers to the instructor-provided corpus and a curated collection of RAG/AI/ML papers. Documents are processed into overlapping chunks, embedded using SentenceTransformers or OpenAI embeddings, and stored in ChromaDB. At query time, semantic search and optional cross-encoder reranking select a small set of context chunks that are passed to the LLM as evidence.
+
+\section{Educational AI and Intelligent Tutoring Systems}
+
+Intelligent tutoring systems (ITS) have a long history in educational technology, with early systems focusing on rule-based models of student knowledge and scaffolding strategies. Recent work explores LLM-powered tutors that generate explanations, hints, and feedback in natural language. A key challenge is ensuring that such systems align with pedagogical goals, detect misconceptions, and avoid over-revealing answers.
+
+The Educational Tutoring Benchmark (ETB) design in this project builds on three recent frameworks: a taxonomy of pedagogical dimensions for LLM tutors~\cite{maurya2025unifying}, a benchmark for open-ended pedagogical capabilities in dialog~\cite{mathtutorbench2025}, and a domain-specific assessment framework for homework grading~\cite{chen2025benchmarking}. Together, they motivate evaluating AI‑Tutor not only on correctness but also on guidance, tone, and dialog structure.
+
+\section{Hybrid LLM Routing and Cost–Latency Trade-offs}
+
+Running educational tutoring workloads solely on hosted LLMs can be costly and latency-sensitive. Hybrid architectures combine local models (e.g., Llama 3 via Ollama) with hosted providers (e.g., GPT‑4o), routing queries based on complexity, sensitivity, or budget constraints. Prior work on model cascades and routing focuses on maximizing accuracy under a cost budget, but often does not integrate pedagogical evaluation.
+
+AI‑Tutor adopts a hybrid routing strategy in which a local Ollama model is preferred for most queries to reduce cost and latency, while an OpenAI model is reserved for escalations when a lightweight self-check indicates insufficient confidence or missing citations, especially in assessment mode. A planned hybrid latency–cost measurement framework records latency distributions, token counts, and routing decisions to empirically tune these policies.
+
+\section{Vector Databases and Embeddings}
+
+The system relies on dense vector representations of text for document retrieval. Sentence-BERT~\cite{reimers2019sentencebert} and related models provide efficient, high-quality sentence embeddings, while modern text embedding models improve performance at scale. Vector databases such as ChromaDB support approximate nearest-neighbor search and persistent storage of embeddings and metadata. AI‑Tutor uses ChromaDB with either local SentenceTransformers embeddings or optional OpenAI embeddings, together with a cross-encoder reranker for fine-grained ranking.
+
+\section{Security and Prompt Injection}
+
+LLM-based systems are vulnerable to prompt injection attacks in which user input attempts to override system instructions or exfiltrate hidden prompts. Recent guidance emphasizes delimiter-based input isolation, explicit system instructions, and pattern-based detection of high-risk phrases. AI‑Tutor implements a dedicated prompt guard module that sanitizes user input, detects instruction-override patterns (e.g., requests to ignore previous instructions or reveal the system prompt), and optionally rejects such queries with a safe response. This is complemented by rate limiting, strict request schemas, and hardened file uploads.
+
+%--------------------------------------------------------------------
+\chapter{System Architecture}
+\label{chap:architecture}
+
+\section{High-Level Overview}
+
+AI‑Tutor adopts a service-oriented architecture centered on a FastAPI backend, a local ChromaDB vector database, and a React/Vite frontend. Figure~\ref{fig:system-context} conceptually depicts the context in which students and instructors interact with the system, external LLM providers, and storage components.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/system-context-placeholder.pdf}
+  \caption{High-level system context for AI‑Tutor (students and instructors interact with a React frontend, which communicates with a FastAPI backend, a local ChromaDB vector database, and external LLM providers via hybrid routing).}
+  \label{fig:system-context}
+\end{figure}
+
+The backend exposes REST and WebSocket endpoints for chat, document upload, health checks, and benchmarking. A query handler orchestrates RAG retrieval and LLM calls, while a hybrid LLM service abstracts over OpenAI and Ollama providers. A document chunker ingests PDFs, DOCX, and text files into the vector store. The frontend renders a chat interface with Markdown and math support, streaming updates over WebSockets for low-latency feedback.
+
+\section{Backend Components}
+
+The backend is organized into loosely coupled services:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API layer.} The FastAPI application in \texttt{main.py} defines REST endpoints for chat (\texttt{/api/chat}), search (\texttt{/api/search}), document management (\texttt{/api/upload}, \texttt{/api/documents}), and benchmarking (\texttt{/api/benchmark/*}), as well as a WebSocket endpoint (\texttt{/ws/chat}) for streaming responses.
+  \item \textbf{Query handler.} The \texttt{QueryHandler} class coordinates prompt injection checks, conversation memory, query compression, retrieval, and LLM calls. It supports both single-response and streaming flows and returns citations and a short TL;DR summary for each answer.
+  \item \textbf{Vector database service.} The \texttt{VectorDatabase} encapsulates ChromaDB operations, including document ingestion, semantic search, optional Maximal Marginal Relevance (MMR) for diversity, and cross-encoder reranking to refine top candidates.
+  \item \textbf{Hybrid LLM service.} The \texttt{HybridLLMService} wraps provider-specific clients for OpenAI and Ollama, maintains availability status, analyzes query complexity, and executes a draft–self-check–escalate loop to decide whether to stay on a local model or escalate to a hosted model.
+  \item \textbf{Configuration and models.} Pydantic-based configuration in \texttt{config.py} centralizes hyperparameters for chunking, retrieval, routing, and security, while Pydantic schemas in \texttt{schemas.py} define request and response contracts for the API.
+\end{itemize}
+
+\section{Document Ingestion and Chunking}
+
+Instructors upload course materials and research papers through the frontend or dedicated scripts. The \texttt{DocumentChunker} supports multiple file formats (TXT, Markdown, PDF, DOCX) and applies a boundary-aware chunking strategy with configurable chunk size and overlap. For research papers, semantic chunking via a recursive character splitter yields chunks that respect paragraph and section boundaries, improving retrieval coherence.
+
+Each chunk is annotated with metadata, including filename, file type, source, and positional information. The vector database service encodes chunks into embeddings and stores them in a persistent ChromaDB collection. Auxiliary scripts automate loading of curated RAG/AI/ML papers and migrating embeddings when models or chunking strategies change.
+
+\section{Retrieval and Reranking}
+
+At query time, the query handler optionally generates paraphrased variants of the user query and retrieves candidate chunks for each variant. The vector database service performs semantic search with relaxed similarity thresholds to maximize recall. A cross-encoder reranker then scores candidate (query, chunk) pairs, enabling the system to select a small set of highly relevant chunks concentrated within the best-matching document.
+
+The retrieval subsystem also computes simple quality metrics such as average distance, estimated similarity, and the number of retrieved chunks. These metrics inform uncertainty handling and provide features for the ETB evaluation pipeline.
+
+\section{Frontend and WebSocket Streaming}
+
+The frontend is a React/Vite single-page application that presents a chat-style interface with support for Markdown, code blocks, and mathematical notation. It communicates with the backend via REST for simple request–response flows and via WebSockets for streaming responses. The WebSocket handler sends structured events indicating processing status, context retrieval progress, partial answer chunks, and completion metadata including citations and TL;DR summaries. This yields a responsive, conversational user experience aligned with modern chat-based tools.
+
+%--------------------------------------------------------------------
+\chapter{Implementation Details}
+\label{chap:implementation}
+
+\section{Backend Technology Stack}
+
+The backend is implemented in Python using FastAPI for HTTP and WebSocket endpoints, SlowAPI for rate limiting, and Pydantic for data validation. ChromaDB serves as the local vector database, with SentenceTransformers providing embedding models and a cross-encoder reranker. OpenAI and Ollama clients wrap hosted and local LLMs, respectively, and environment-specific configuration is managed via \texttt{.env} files loaded by \texttt{pydantic-settings}.
+
+The codebase is organized into modules for services, models, utilities, and scripts. This modular structure simplifies testing, facilitates future replacements of individual components (e.g., swapping vector backends), and supports experimentation with retrieval and routing parameters without altering higher-level logic.
+
+\section{Query Handling and RAG Pipeline}
+
+The \texttt{QueryHandler} encapsulates the end-to-end RAG pipeline. Upon receiving a query, it first checks for high-confidence demo interactions and for prompt injection patterns. If prompt injection rejection is enabled, suspicious queries are short-circuited with a safe, course-scoped message. Otherwise, the handler records the query in conversation history, compresses it together with recent turns into a shorter retrieval query, and calls the vector database service to obtain context chunks.
+
+The handler then assesses retrieval quality using distance- and similarity-based heuristics and constructs a tutor prompt that includes the user question, a compact representation of recent conversation, the retrieved context, and retrieval-quality annotations. Depending on the mode (exploration or assessment), different system prompts and generation parameters are used. The resulting LLM response is saved to history, accompanied by derived citations and a TL;DR.
+
+\section{Hybrid LLM Routing and Self-Check}
+
+The \texttt{HybridLLMService} maintains provider instances for OpenAI, Ollama, and a mock provider used in testing or as a last resort. A query-complexity analyzer examines lexical patterns and length to classify queries as simple, complex, or unknown. For non-benchmark chat flows, the hybrid service typically generates an initial draft answer using a local Ollama model, then runs a lightweight self-check prompt that scores the answer along dimensions such as confidence and citation completeness.
+
+If the confidence score falls below a configurable threshold or, in assessment mode, if citations are missing, the service attempts to escalate to a hosted OpenAI model and regenerate the answer. The final response carries metadata including the chosen provider, model, confidence estimate, and an escalation flag. For benchmarking flows, the service can be directed to use a specific provider–model pair, bypassing routing logic.
+
+\section{Configuration and Tuning}
+
+Configuration parameters are centralized in the \texttt{Settings} class and loaded from environment variables. They include:
+\begin{itemize}[leftmargin=*]
+  \item Chunking settings (chunk size, overlap, semantic chunking toggle).
+  \item Retrieval settings (similarity threshold, number of candidates, rerank top-$k$, maximum context characters).
+  \item Routing settings (assessment and exploration confidence thresholds, maximum tokens and temperatures per mode).
+  \item Security settings (prompt injection rejection flag, rate limits, CORS origins, secret key).
+\end{itemize}
+
+This design allows researchers and practitioners to conduct ablation studies or deployment-specific tuning by modifying configuration rather than application code, enhancing reproducibility and maintainability.
+
+%--------------------------------------------------------------------
+\chapter{Evaluation Methodology}
+\label{chap:evaluation}
+
+\section{Educational Tutoring Benchmark (ETB)}
+
+The Educational Tutoring Benchmark is designed to evaluate AI‑Tutor across three layers: pedagogical effectiveness, dialog quality, and domain accuracy. It integrates three peer-reviewed frameworks:
+\begin{itemize}[leftmargin=*]
+  \item An eight-dimensional pedagogical taxonomy assessing mistake identification, guidance, actionability, coherence, tone, and related factors~\cite{maurya2025unifying}.
+  \item A dialog-centric benchmark for multi-turn tutoring conversations that measures coherence, context retention, learning progression, and student engagement~\cite{mathtutorbench2025}.
+  \item A domain-specific assessment framework for homework-style responses with metrics for accuracy, terminology, and feedback quality~\cite{chen2025benchmarking}.
+\end{itemize}
+
+The ETB runner executes scripted tutoring scenarios drawn from an \texttt{etb\_dataset.json} file that encodes domains (RAG, embeddings, transformers, neural networks, AI/ML), difficulty levels, and expected key points and misconceptions. For each scenario and model, responses are collected and scored by specialized evaluators, and the results are aggregated into an overall ETB score.
+
+\section{Benchmark Scales and Usage}
+
+To accommodate different use cases, the benchmark supports small, medium, and large scales:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Small:} A handful of questions and one or two models, suitable for quick regression checks.
+  \item \textbf{Medium:} Tens of questions and multiple models, suitable for regular evaluation during development.
+  \item \textbf{Large:} The full dataset and all available models, intended for research reporting.
+\end{itemize}
+
+Command-line interfaces for the ETB runner and a simpler latency–cost benchmark script allow experiments to be launched from the project root, with results written to structured JSON, CSV, and text summary files. The reporting layer produces model rankings, per-domain breakdowns, and dimension-level analyses.
+
+\section{Latency, Cost, and Routing Analysis}
+
+In addition to educational metrics, the benchmark design includes a latency–cost measurement plan for hybrid routing. For each request, the system records:
+\begin{itemize}[leftmargin=*]
+  \item Time-to-first-byte and total latency.
+  \item Prompt, completion, and total token counts.
+  \item Selected provider and model, along with routing metadata.
+  \item Confidence estimates and escalation decisions from the self-check mechanism.
+\end{itemize}
+
+By aggregating these measurements across workloads and models, one can estimate per-model and per-mode cost, identify regimes where local models are sufficient, and quantify the empirical trade-offs between quality improvements and additional latency or cost from escalations. While this thesis focuses on the design and instrumentation rather than a full experimental campaign, it lays the groundwork for future empirical studies.
+
+%--------------------------------------------------------------------
+\chapter{Security and Robustness}
+\label{chap:security}
+
+\section{Threat Model}
+
+AI‑Tutor, like other LLM-based systems, is exposed to untrusted user input via chat messages and file uploads. The main threats considered in this work include:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Prompt injection and instruction override}, where inputs attempt to circumvent system prompts or obtain internal instructions.
+  \item \textbf{Resource abuse and denial of service}, via repeated or oversized requests that degrade performance or incur excessive cost.
+  \item \textbf{File-system and path traversal attacks}, via malicious filenames or uploads.
+  \item \textbf{Information leakage}, through verbose error messages or logging of sensitive content.
+\end{itemize}
+
+The current deployment targets single-tenant, research-oriented environments rather than multi-tenant production systems, but the security design aims to provide a solid baseline for more stringent deployments.
+
+\section{Prompt and Input Guards}
+
+The prompt guard module performs pattern-based detection of high-risk phrases associated with prompt injection, such as requests to ignore previous instructions, reveal the system prompt, or print internal context. It also sanitizes user messages by stripping control characters, collapsing excessive newlines, and truncating long inputs. User content is wrapped in clear delimiters before being inserted into prompts, and system prompts explicitly instruct the LLM to treat only delimited content as the user question.
+
+When the \texttt{reject\_on\_injection} flag is enabled, any query matching injection patterns is rejected with a neutral, course-scoped message, and the LLM is not called. This reduces the risk of instruction override and prompt exfiltration, while still providing a user-visible explanation.
+
+\section{API and File Safety}
+
+Rate limits enforced by SlowAPI bound the number of chat and upload requests per client, mitigating abuse and controlling cost. Pydantic schemas enforce maximum message lengths and conversation history sizes, ensuring that payloads remain within manageable bounds. CORS settings restrict allowed origins, particularly in production.
+
+All file upload endpoints pass filenames through a centralized sanitizer that strips path components, removes problematic characters, enforces an allowlist of extensions, and caps filename length. Uploaded files are stored in a dedicated temporary directory, processed into chunks, and then deleted, reducing the persistence of untrusted artifacts.
+
+\section{Operational Practices}
+
+In production mode, error handlers return generic 500 responses without exposing internal stack traces, and logging is configured to avoid recording full prompt and response content. Configuration samples and developer documentation describe recommended environment variables, rate limits, and security flags. Additional planned measures include authentication, security headers and Content Security Policy, audit logging of security-relevant events, and stricter default settings for production deployments.
+
+%--------------------------------------------------------------------
+\chapter{Discussion and Future Work}
+\label{chap:discussion}
+
+\section{Current Limitations}
+
+The present AI‑Tutor implementation emphasizes architecture, modularity, and security, but several aspects remain incomplete. First, the hybrid latency–cost experiments and ETB benchmark campaigns are designed and implemented at the tooling level but have not yet been run exhaustively across multiple models and workloads, so empirical claims about trade-offs are prospective rather than retrospective. Second, the system currently assumes a trusted, single-tenant environment without user authentication or role-based access control. Third, while prompt injection defenses and input sanitization reduce attack surface, they do not fully address advanced jailbreak techniques or cross-channel attacks.
+
+From a pedagogical perspective, the ETB dataset captures a focused set of RAG/AI/ML concepts and difficulty levels; broader curricula and longitudinal studies would be required to evaluate long-term learning outcomes. The current tutor also relies primarily on text-based interactions, without multimodal inputs or outputs, which may be important for some courses.
+
+\section{Future Enhancements}
+
+Future work can proceed along several directions:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Empirical hybrid routing studies.} Running the planned latency–cost experiments with multiple Ollama and OpenAI models, and comparing routing policies, would yield concrete guidance for educational deployments under varying budget constraints.
+  \item \textbf{Expanded ETB datasets.} Extending the ETB dataset to additional domains, difficulty levels, and scenario types, and involving human raters for calibration, would strengthen the validity of ETB scores.
+  \item \textbf{Authentication and multi-tenancy.} Adding user authentication, per-user rate limits, and role-based dashboards would prepare AI‑Tutor for classroom or institutional pilots.
+  \item \textbf{Advanced defenses.} Integrating more sophisticated prompt-injection mitigation techniques, e.g., content-based filters, LLM-as-judge gating, or structure-preserving templates, could improve robustness against evolving attacks.
+  \item \textbf{UX and accessibility.} Enhancing the frontend with accessibility features, alternative modalities, and instructor-facing analytics could improve adoption and impact.
+\end{itemize}
+
+%--------------------------------------------------------------------
+\chapter{Conclusion}
+\label{chap:conclusion}
+
+This thesis has presented AI‑Tutor, a retrieval-augmented, hybrid LLM tutoring system designed as a research platform for course-grounded assistance in RAG/AI/ML domains. The system integrates a modular FastAPI backend, a ChromaDB vector database, a React frontend with WebSocket streaming, a hybrid LLM routing layer with self-check, an Educational Tutoring Benchmark suite, and a multi-layer security design.
+
+By consolidating these components into a cohesive architecture and implementation, AI‑Tutor demonstrates how modern LLMs can be embedded into a defensible, extensible tutoring platform that balances grounding, educational quality, and operational concerns. While significant empirical evaluation remains future work, the system provides a solid foundation on which to build and study next-generation AI tutors.
+
+\appendix
+
+\chapter{API Overview}
+\label{app:api}
+
+This appendix summarizes key backend endpoints, including chat, upload, search, and benchmarking APIs, derived from the FastAPI application and developer documentation.
+
+\chapter{Configuration Tables}
+\label{app:config}
+
+This appendix lists important configuration parameters (chunking, retrieval, routing, and security) and their default values, as defined in the \texttt{Settings} class.
+
+\chapter{Benchmark Commands}
+\label{app:benchmark}
+
+This appendix collects representative benchmark commands for ETB and latency–cost experiments, together with notes on expected runtimes and report locations.
+
+% Uncomment and adjust once you have a .bib file
+% \bibliographystyle{plain}
+% \bibliography{references}
+
+\end{document}

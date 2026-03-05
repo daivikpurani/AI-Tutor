@@ -65,6 +65,7 @@ See [QUICK_START.md](./QUICK_START.md) for one-command setup and [docs/DEVELOPER
 | [docs/WebSocket-Testing-Guide.md](./docs/WebSocket-Testing-Guide.md) | WebSocket testing |
 | [docs/Postman-Collection-README.md](./docs/Postman-Collection-README.md) | Postman API collection |
 | [docs/CHROMADB_UPGRADE_ISSUES.md](./docs/CHROMADB_UPGRADE_ISSUES.md) | Python/ChromaDB compatibility |
+| [docs/WEEKLY_RESEARCH_UPDATE_SECURITY_IMPROVEMENTS.md](./docs/WEEKLY_RESEARCH_UPDATE_SECURITY_IMPROVEMENTS.md) | Weekly update: security hardening and improvements |
 
 ## Security
 

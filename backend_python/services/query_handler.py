@@ -12,7 +12,7 @@ from datetime import datetime
 import logging
 
 from services.vector_db import VectorDatabase
-from services.llm_service import HybridLLMService, LLMResponse
+from services.llm_service import HybridLLMService, LLMResponse, LLMProvider
 from utils.prompts import PromptTemplates
 from utils.config import settings
 from utils.prompt_guard import detect_injection
@@ -555,6 +555,68 @@ class QueryHandler:
         try:
             await self._ensure_llm_service_initialized()
 
+            # Direct OpenAI path (temp): skip RAG and hybrid routing, single response from OpenAI
+            if getattr(settings, 'direct_openai_streaming', False):
+                injected, _ = detect_injection(query)
+                if getattr(settings, 'reject_on_injection', False) and injected:
+                    safe_msg = "I can only answer questions about the course materials. Please ask something about the content you're learning."
+                    self._add_to_history(query, 'user', user_id)
+                    self._add_to_history(safe_msg, 'assistant', user_id)
+                    return {
+                        'response': safe_msg,
+                        'query': query,
+                        'user_id': user_id,
+                        'timestamp': datetime.now().isoformat(),
+                        'context_chunks_used': 0,
+                        'status': 'success',
+                        'llm_provider': 'none',
+                        'llm_model': 'none',
+                        'llm_usage': {},
+                        'llm_metadata': {},
+                        'citations': [],
+                        'tldr': safe_msg[:160],
+                    }
+                self._add_to_history(query, 'user', user_id)
+                messages = self._build_direct_openai_messages(user_id)
+                openai_provider = self.llm_service.providers.get(LLMProvider.OPENAI)
+                if not openai_provider or not openai_provider.is_available:
+                    return {
+                        'response': 'OpenAI is not available.',
+                        'query': query,
+                        'user_id': user_id,
+                        'timestamp': datetime.now().isoformat(),
+                        'context_chunks_used': 0,
+                        'status': 'error',
+                        'llm_provider': 'none',
+                        'llm_model': 'none',
+                        'llm_usage': {},
+                        'llm_metadata': {},
+                        'citations': [],
+                        'tldr': '',
+                    }
+                response = await openai_provider.generate_response(
+                    messages=messages,
+                    max_tokens=getattr(settings, 'openai_max_tokens', 1000),
+                    temperature=getattr(settings, 'openai_temperature', 0.7),
+                )
+                self._add_to_history(response.content, 'assistant', user_id)
+                first_line = (response.content or "").split("\n")[0].strip()
+                tldr = (first_line[:157] + "...") if len(first_line) > 160 else first_line
+                return {
+                    'response': (response.content or "").strip(),
+                    'query': query,
+                    'user_id': user_id,
+                    'timestamp': datetime.now().isoformat(),
+                    'context_chunks_used': 0,
+                    'status': 'success',
+                    'llm_provider': response.provider.value,
+                    'llm_model': response.model,
+                    'llm_usage': response.usage or {},
+                    'llm_metadata': getattr(response, 'metadata', {}) or {},
+                    'citations': [],
+                    'tldr': tldr,
+                }
+
             # Demo: hardcoded two-turn RAG Q&A
             demo_response = self._get_demo_response(
                 query, conversation_history or self.get_conversation_history(user_id), user_id
@@ -808,7 +870,24 @@ class QueryHandler:
         if user_id:
             return [entry for entry in self.conversation_history if entry.get('user_id') == user_id]
         return self.conversation_history
-    
+
+    def _build_direct_openai_messages(self, user_id: str = None) -> List[Dict[str, str]]:
+        """Build OpenAI chat messages from conversation history (system + last 10 turns). Used for direct OpenAI path."""
+        system_content = (
+            "You are a concise tutor. Answer only questions about RAG (retrieval-augmented generation), "
+            "Machine Learning, and AI. Stay on-topic and grounded; if the question is outside these areas, "
+            "say so briefly. Give short, direct answers—no extra context or filler."
+        )
+        history = self.get_conversation_history(user_id) or []
+        recent = history[-20:]  # last 10 turns (20 messages)
+        openai_messages = [{"role": "system", "content": system_content}]
+        for entry in recent:
+            role = entry.get("role") or "user"
+            content = entry.get("message") or ""
+            if role in ("user", "assistant") and content:
+                openai_messages.append({"role": role, "content": content})
+        return openai_messages
+
     def clear_history(self, user_id: str = None):
         """Clear conversation history."""
         if user_id:
@@ -843,6 +922,56 @@ class QueryHandler:
             
             # Store query in conversation history
             self._add_to_history(query, 'user', user_id)
+
+            # Direct OpenAI path (temp): skip RAG and hybrid routing, stream from OpenAI only
+            if getattr(settings, 'direct_openai_streaming', False):
+                injected, _ = detect_injection(query)
+                if getattr(settings, 'reject_on_injection', False) and injected:
+                    safe_msg = "I can only answer questions about the course materials. Please ask something about the content you're learning."
+                    self._add_to_history(safe_msg, 'assistant', user_id)
+                    await manager.send_personal_message(
+                        json.dumps({"type": "chunk", "content": safe_msg, "timestamp": datetime.now().isoformat()}),
+                        websocket
+                    )
+                    await manager.send_personal_message(
+                        json.dumps({
+                            "type": "complete",
+                            "message": "Response complete",
+                            "timestamp": datetime.now().isoformat(),
+                            "citations": [],
+                            "tldr": safe_msg[:160],
+                        }),
+                        websocket
+                    )
+                    return
+                messages = self._build_direct_openai_messages(user_id)
+                openai_provider = self.llm_service.providers.get(LLMProvider.OPENAI)
+                if not openai_provider or not openai_provider.is_available:
+                    err_msg = {"type": "error", "message": "OpenAI is not available.", "timestamp": datetime.now().isoformat()}
+                    await manager.send_personal_message(json.dumps(err_msg), websocket)
+                    return
+                full_response = ""
+                async for chunk in openai_provider.generate_streaming_response(
+                    messages=messages,
+                    max_tokens=getattr(settings, 'openai_max_tokens', 1000),
+                    temperature=getattr(settings, 'openai_temperature', 0.7),
+                ):
+                    if chunk and chunk.strip():
+                        full_response += chunk
+                        chunk_msg = {"type": "chunk", "content": chunk, "timestamp": datetime.now().isoformat()}
+                        await manager.send_personal_message(json.dumps(chunk_msg), websocket)
+                first_line = full_response.split("\n")[0].strip() if full_response else ""
+                tldr = (first_line[:157] + "...") if len(first_line) > 160 else first_line
+                complete_msg = {
+                    "type": "complete",
+                    "message": "Response complete",
+                    "timestamp": datetime.now().isoformat(),
+                    "citations": [],
+                    "tldr": tldr,
+                }
+                await manager.send_personal_message(json.dumps(complete_msg), websocket)
+                self._add_to_history(full_response, 'assistant', user_id)
+                return
 
             # Demo: hardcoded two-turn RAG Q&A (send full answer at once)
             user_history = self.get_conversation_history(user_id)

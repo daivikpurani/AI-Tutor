@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 
 # Phrases that often indicate prompt injection (lowercased for matching)
 INJECTION_PATTERNS = [
-    r"ignore\s+(all\s+)?(previous|above|prior)\s+instructions",
-    r"disregard\s+(all\s+)?(previous|above|prior)\s+instructions",
-    r"forget\s+(all\s+)?(previous|above|prior)\s+instructions",
+    r"ignore\s+(all\s+)?(previous|above|prior)\s+(instructions?|responses?)",
+    r"disregard\s+(all\s+)?(previous|above|prior)\s+(instructions?|responses?)",
+    r"forget\s+(all\s+)?(previous|above|prior)\s+(instructions?|responses?)",
     r"you\s+are\s+now",
     r"new\s+instructions?\s*:",
     r"system\s*:\s*",
