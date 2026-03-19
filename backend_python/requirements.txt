@@ -1,13 +1,13 @@
 # FastAPI Backend Dependencies
 # Use Python 3.11 or 3.12. Python 3.14 is not yet supported (pandas/tiktoken build failures).
 # Core web framework
-fastapi==0.104.1
-pydantic-settings>=2.0.0
-uvicorn[standard]==0.24.0
+fastapi==0.109.0
+pydantic-settings>=2.1.0
+uvicorn[standard]==0.27.0
 python-multipart==0.0.6
 
 # Vector Database
-chromadb==0.4.18
+chromadb==0.4.22
 sentence-transformers>=2.6.0
 
 # LLM and AI libraries
@@ -15,20 +15,22 @@ openai>=1.6.1
 langchain==0.0.350
 langchain-openai==0.0.2
 tiktoken>=0.5.2
-ollama==0.1.7
+ollama>=0.2.0
 
 # Document processing
 PyPDF2==3.0.1
 python-docx==1.1.0
 python-magic==0.4.27
+pdfplumber>=0.10.3
 
 # Data processing
 pandas==2.0.3
 numpy==1.24.3
 python-dotenv==1.0.0
+python-dateutil>=2.8.2
 
 # HTTP and async
-httpx==0.25.2
+httpx>=0.26.0
 aiofiles==23.2.1
 urllib3<2.0.0
 
@@ -37,6 +39,25 @@ slowapi>=0.1.9
 
 # CORS and middleware
 # CORS is handled by FastAPI's built-in CORS middleware
+
+# =============================================================================
+# Homework Grading Subsystem Dependencies
+# =============================================================================
+
+# Google Gemini (LLM + embeddings for grading)
+google-generativeai>=0.3.2
+
+# PostgreSQL ORM (grading system relational data: courses, students, grades)
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.9
+alembic>=1.13.1
+
+# Structured logging (used throughout homework-grader)
+loguru>=0.7.2
+
+# Validation helpers
+email-validator>=2.1.0
+pyyaml>=6.0.1
 
 # Testing
 pytest==7.4.3

@@ -997,6 +997,23 @@ async def internal_error_handler(request, exc):
         content={"error": "Internal server error", "detail": str(exc)}
     )
 
+# ---------------------------------------------------------------------------
+# Mount Homework Grading subsystem at /grading
+# All grading API routes are accessible at /grading/api/v1/...
+# ---------------------------------------------------------------------------
+import sys as _sys
+_homework_grader_backend = str(Path(__file__).parent.parent / "homework-grader" / "backend")
+if _homework_grader_backend not in _sys.path:
+    _sys.path.insert(0, _homework_grader_backend)
+
+try:
+    from app.main import app as grading_app  # noqa: E402
+    app.mount("/grading", grading_app)
+    logger.info("homework-grader subsystem mounted at /grading")
+except Exception as _e:
+    logger.warning("homework-grader subsystem not available: %s", _e)
+
+
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",

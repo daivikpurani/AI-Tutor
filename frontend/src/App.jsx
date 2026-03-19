@@ -3,6 +3,7 @@ import './App.css';
 import Docs from './Docs';
 import ChatBubble from './components/ChatBubble';
 import TypingIndicator from './components/TypingIndicator';
+import Grading from './grading/Grading';
 
 function App() {
   const [messages, setMessages] = useState([
@@ -426,6 +427,12 @@ function App() {
             >
               Settings
             </button>
+            <button 
+              onClick={() => setCurrentPage('grading')} 
+              className={`nav-item ${currentPage === 'grading' ? 'active' : ''}`}
+            >
+              Grading
+            </button>
           </nav>
         </div>
         <div className="header-right">
@@ -604,6 +611,8 @@ function App() {
             </div>
           </div>
         )}
+
+        {currentPage === 'grading' && <Grading />}
       </main>
 
     </div>
